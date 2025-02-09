@@ -65,6 +65,30 @@ Run tests:
 poetry run pytest
 ```
 
+## Core Components
+
+### MarkdownSection
+
+The `MarkdownSection` class is the fundamental data structure that represents a section of a Markdown document. It maintains both the content and hierarchical structure of the document.
+
+```python
+@dataclass
+class MarkdownSection:
+    section_header: str       # The header text (without # symbols)
+    section_text: str        # The content below the header
+    header_level: int        # Number of # symbols (1-6)
+    metadata: dict          # Contains hierarchical information
+```
+
+#### Features
+
+- **Header Hierarchy**: Tracks parent headers up to 4 levels (h1-h4)
+- **Flexible Creation**: Use the `create()` factory method for proper instantiation
+- **Multiple Export Formats**:
+  - Convert to dictionary with `to_dict()`
+  - Convert back to Markdown with `to_markdown()`
+  - Pretty-printed JSON representation via `str()`
+
 ## License
 
 Apache License 2.0 - See [LICENSE](LICENSE) for details.
