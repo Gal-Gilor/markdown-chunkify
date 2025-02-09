@@ -1,6 +1,6 @@
 import pytest
 
-from src.utils.splitters import MarkdownSplitter
+from markdown_chunkify.utils.splitters import MarkdownSplitter
 
 
 @pytest.fixture

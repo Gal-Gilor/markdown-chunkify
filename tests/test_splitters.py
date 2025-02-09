@@ -1,6 +1,6 @@
 import pytest
 
-from src.splitters import MarkdownSplitter
+from markdown_chunkify.utils.splitters import MarkdownSplitter
 
 
 def test_empty_input(splitter):
@@ -35,9 +35,9 @@ def test_nested_headers(splitter, nested_markdown):
 
 def test_parent_headers(splitter, sample_markdown):
     sections = splitter.split_markdown(sample_markdown)
-    assert sections[2].metadata["parents"]["h1"] == "Header 2"
-    assert sections[3].metadata["parents"]["h1"] == "Header 2"
-    assert sections[3].metadata["parents"]["h2"] == "Header 2.1"
+    assert sections[1].metadata["parents"]["h1"] == "Header 1"
+    assert sections[-1].metadata["parents"]["h1"] == "Header 2"
+    assert sections[-1].metadata["parents"]["h2"] == "Header 2.1"
 
 
 def test_file_operations(tmp_path):
@@ -67,7 +67,25 @@ def test_header_level_counting(splitter):
 
 
 def test_metadata_structure(splitter):
-    text = "## Header"
+    text = "# H1\n## H2"
     sections = splitter.split_markdown(text)
-    assert "parents" in sections[0].metadata
-    assert all(key in sections[0].metadata["parents"] for key in ["h1", "h2", "h3", "h4"])
+
+    assert all("parents" in section.metadata for section in sections)
+    assert all(isinstance(section.metadata["parents"], dict) for section in sections)
+    assert sections[0].metadata["parents"] == {}
+    assert "h1" in sections[1].metadata["parents"]
+
+
+def test_to_dict(splitter, sample_markdown):
+    sections = splitter.split_markdown(sample_markdown)
+    assert sections[0].to_dict() == {
+        "section_header": "Header 1",
+        "section_text": "Content 1",
+        "header_level": 1,
+        "metadata": {"parents": {}},
+    }
+
+
+def test_to_markdown(splitter, sample_markdown):
+    sections = splitter.split_markdown(sample_markdown)
+    assert sections[0].to_markdown() == "# Header 1\n\nContent 1"
