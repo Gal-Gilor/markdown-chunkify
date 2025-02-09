@@ -8,7 +8,7 @@ authors = [
 packages = [{include = "markdown_chunkify"}]
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["pytest-cov (>=6.0.0,<7.0.0)"]
+dependencies = []
 
 [project.urls]
 Github = "https://github.com/Gal-Gilor/markdown-chunkify"
@@ -16,6 +16,7 @@ Issues = "https://github.com/Gal-Gilor/markdown-chunkify/issues"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
+pytest-cov = ">=6.0.0,<7.0.0"
 black = "^23.0"
 isort = ">=5.13.2,<6.0.0"
 ruff = ">=0.9.3,<0.10.0"
