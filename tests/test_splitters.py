@@ -4,11 +4,13 @@ from markdown_chunkify.utils.splitters import MarkdownSplitter
 
 
 def test_empty_input(splitter):
+    """ "Test empty input for the MarkdownSplitter."""
     assert splitter.split_markdown("") == []
     assert splitter.split_markdown("   ") == []
 
 
 def test_single_header(splitter):
+    """Test a single header in a sample markdown text."""
     text = "# Header\nContent"
     sections = splitter.split_markdown(text)
     assert len(sections) == 1
@@ -18,6 +20,7 @@ def test_single_header(splitter):
 
 
 def test_multiple_headers_same_level(splitter):
+    """Test multiple headers at the same level in a sample markdown text."""
     text = "# H1\nC1\n# H2\nC2"
     sections = splitter.split_markdown(text)
     assert len(sections) == 2
@@ -26,6 +29,7 @@ def test_multiple_headers_same_level(splitter):
 
 
 def test_nested_headers(splitter, nested_markdown):
+    """Test nested headers in a sample markdown text."""
     sections = splitter.split_markdown(nested_markdown)
     assert len(sections) == 3
     assert [s.header_level for s in sections] == [1, 2, 3]
@@ -34,10 +38,17 @@ def test_nested_headers(splitter, nested_markdown):
 
 
 def test_parent_headers(splitter, sample_markdown):
+    """Test parent headers in a sample markdown text."""
     sections = splitter.split_markdown(sample_markdown)
     assert sections[1].metadata["parents"]["h1"] == "Header 1"
     assert sections[-1].metadata["parents"]["h1"] == "Header 2"
     assert sections[-1].metadata["parents"]["h2"] == "Header 2.1"
+
+
+def test_number_of_sections(splitter, sample_markdown):
+    """Test the number of sections in a sample markdown text."""
+    sections = splitter.split_markdown(sample_markdown)
+    assert len(sections) == 5
 
 
 def test_file_operations(tmp_path):
@@ -51,22 +62,26 @@ def test_file_operations(tmp_path):
 
 
 def test_file_not_found():
+    """Test file not found error."""
     with pytest.raises(FileNotFoundError):
         MarkdownSplitter.from_file("nonexistent.md")
 
 
 def test_is_directory(tmp_path):
+    """Test if the path is a directory."""
     with pytest.raises(IsADirectoryError):
         MarkdownSplitter.from_file(tmp_path)
 
 
 def test_header_level_counting(splitter):
+    """Test header level counting in a sample markdown text."""
     text = "### Header"
     sections = splitter.split_markdown(text)
     assert sections[0].header_level == 3
 
 
 def test_metadata_structure(splitter):
+    """Test metadata structure in a sample markdown text."""
     text = "# H1\n## H2"
     sections = splitter.split_markdown(text)
 
@@ -77,6 +92,7 @@ def test_metadata_structure(splitter):
 
 
 def test_to_dict(splitter, sample_markdown):
+    """Test to_dict method in a sample markdown text."""
     sections = splitter.split_markdown(sample_markdown)
     assert sections[0].to_dict() == {
         "section_header": "Header 1",
@@ -87,5 +103,6 @@ def test_to_dict(splitter, sample_markdown):
 
 
 def test_to_markdown(splitter, sample_markdown):
+    """Test to_markdown method in a sample markdown text."""
     sections = splitter.split_markdown(sample_markdown)
     assert sections[0].to_markdown() == "# Header 1\n\nContent 1"

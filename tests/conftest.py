@@ -18,6 +18,9 @@ Content 1.1
 Content 2
 ## Header 2.1
 Content 2.1
+```python
+# Code block comment
+```
 ### Header 2.1.1
 Content 2.1.1"""
 
