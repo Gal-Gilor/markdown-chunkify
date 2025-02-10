@@ -7,9 +7,7 @@ A Python library for intelligently splitting Markdown documents into hierarchica
 - Split markdown documents into structured sections based on headers
 - Preserve complete header hierarchy (h1-h4)
 - Track parent-child relationships between sections
-- Clean, typed API using dataclasses
-- Support for both string and file inputs
-- Full test coverage
+- Support for both Markdown string and file inputs
 - Python 3.12+ support
 
 ## Installation
