@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from dataclasses import asdict
 from dataclasses import dataclass
@@ -60,47 +61,94 @@ class MarkdownSplitter:
         self, current_level: int, header_stack: list[tuple[int, str]]
     ) -> dict[str, Optional[str]]:
         """Find parent headers for the current header level."""
-        parents = {f"h{i}": None for i in range(1, 5)}  # Initialize all parent levels as None
+        # Initialize all parent levels as None
+        parents = {f"h{i}": None for i in range(1, 5)}
 
         for level, header in header_stack:
-            if (
-                level < current_level
-            ):  # Only headers of higher levels (fewer #) can be parents
+            if level < current_level:  # Allow only H1 - H4 headers as parents
                 parents[f"h{level}"] = header
 
         return parents
 
+    def _process_code_blocks(self, text: str) -> tuple[str, dict[str, str]]:
+        """Identify Markdown code blocks and tokenize pound signs [#] in comments.
+
+        Args:
+            text: Raw Markdown text containing potential code blocks
+
+        Returns:
+            tuple: Contains:
+                - str: Processed text with code comments replaced by tokens
+                - dict: Mapping of tokens to their original comment text
+        """
+        replacement_map = {}
+        counter = 0
+
+        def replace_comments(match):
+            """Replace code comments with tokens in a single code block."""
+
+            # Allows cpunter modification from the outer scope.
+            nonlocal counter
+            # Extract text between backticks
+            code_block = match.group(1)
+            lines = code_block.split("\n")
+            processed_lines = []
+
+            for line in lines:
+                # Identify comments accounting for indentation
+                if line.lstrip().startswith("#"):
+                    token = f"{{{{CODE_COMMENT_{counter}}}}}"
+                    replacement_map[token] = line
+                    counter += 1
+                    processed_lines.append(token)
+
+                else:
+                    processed_lines.append(line)
+
+            return f"```{os.linesep.join(processed_lines)}```"
+
+        # Process all code blocks in the text
+        # Match content between triple backticks
+        code_block_pattern = r"```(?:.*?)\n(.*?)```"
+        processed_text = re.sub(code_block_pattern, replace_comments, text, flags=re.DOTALL)
+
+        return processed_text, replacement_map
+
     def split_markdown(self, text: str) -> list[MarkdownSection]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
-        The metadata includes the parent headers for each section up to 4 levels.
-
         Args:
-            text (str): Markdown text to split.
+            text: Markdown text to split
 
         Returns:
-            list[MarkdownSection]: List of markdown sections with hierarchy information.
+            list[MarkdownSection]: List of markdown sections with hierarchy information
         """
         if not text.strip():
             return []
 
+        # Replace # wrapped in backticks with {{{{CODE_COMMENT}}}} tokens
+        processed_text, replacement_map = self._process_code_blocks(text)
+
         # Find all headers with their positions
-        headers = list(self._header_pattern.finditer(text))
+        headers = list(self._header_pattern.finditer(processed_text))
         sections = []
-        header_stack: list[tuple[int, str]] = []  # Stack to track parent headers
+        header_stack: list[tuple[int, str]] = []
 
         for i, match in enumerate(headers):
-            # Get the current header's information
             header_marks = match.group(1)
             header_text = match.group(2).strip()
             current_level = self._get_header_level(header_marks)
 
-            # Get the section text (everything between this header and the next)
+            # Extract section content (text between current header and next one)
             start_pos = match.end()
-            end_pos = headers[i + 1].start() if i + 1 < len(headers) else len(text)
-            section_text = text[start_pos:end_pos].strip()
+            end_pos = headers[i + 1].start() if i + 1 < len(headers) else len(processed_text)
+            section_text = processed_text[start_pos:end_pos].strip()
 
-            # Update header stack based on current header level
+            # Restore original code comments
+            for token, original in replacement_map.items():
+                section_text = section_text.replace(token, original)
+
+            # Update header hierarchy
             while header_stack and header_stack[-1][0] >= current_level:
                 header_stack.pop()
             header_stack.append((current_level, header_text))
@@ -114,7 +162,7 @@ class MarkdownSplitter:
                 parent_headers=parent_headers,
             )
 
-            # Remove missing parent headers metadata
+            # Remove empty parent headers from metadata
             section.metadata["parents"] = {
                 k: v for k, v in section.metadata["parents"].items() if v is not None
             }
