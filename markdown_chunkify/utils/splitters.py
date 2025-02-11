@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Optional
 from typing import Union
 
+from markdown_chunkify.core.models import BaseSplitter
+
 
 @dataclass
 class MarkdownSection:
@@ -46,16 +48,12 @@ class MarkdownSection:
         return json.dumps(asdict(self), indent=2)
 
 
-class MarkdownSplitter:
+class MarkdownSplitter(BaseSplitter):
     """A class for splitting Markdown text by headers while maintaining hierarchy."""
 
     def __init__(self):
         # Regex to capture both the header level (number of #) and the header text
         self._header_pattern = re.compile(r"^(#+)\s+(.+)$", re.MULTILINE)
-
-    def _get_header_level(self, header_marks: str) -> int:
-        """Get the level of the header based on number of # marks."""
-        return len(header_marks)
 
     def _find_parent_headers(
         self, current_level: int, header_stack: list[tuple[int, str]]
@@ -114,7 +112,7 @@ class MarkdownSplitter:
 
         return processed_text, replacement_map
 
-    def split_markdown(self, text: str) -> list[MarkdownSection]:
+    def split_text(self, text: str) -> list[MarkdownSection]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Args:
@@ -137,7 +135,7 @@ class MarkdownSplitter:
         for i, match in enumerate(headers):
             header_marks = match.group(1)
             header_text = match.group(2).strip()
-            current_level = self._get_header_level(header_marks)
+            current_level = len(header_marks)
 
             # Extract section content (text between current header and next one)
             start_pos = match.end()
@@ -196,4 +194,4 @@ class MarkdownSplitter:
 
         splitter = cls()
         with path.open("r", encoding=encoding) as f:
-            return splitter.split_markdown(f.read())
+            return splitter.split_text(f.read())
