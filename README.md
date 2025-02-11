@@ -32,7 +32,7 @@ splitter = MarkdownSplitter()
 # From file
 sections = MarkdownSplitter.from_file('document.md')
 # From text
-sections = splitter.split_markdown(text)
+sections = splitter.split_text(text)
 ```
 
 ## MarkdownSection
