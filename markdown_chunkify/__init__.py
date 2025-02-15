@@ -1,4 +1,4 @@
-from markdown_chunkify.utils.parsers import PyMuPDFMParser
-from markdown_chunkify.utils.splitters import MarkdownSplitter
+from markdown_chunkify.components.parsers import PyMuPDFMParser
+from markdown_chunkify.components.splitters import MarkdownSplitter
 
 __all__ = ["MarkdownSplitter", "PyMuPDFMParser"]

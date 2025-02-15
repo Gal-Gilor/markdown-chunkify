@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pymupdf4llm
 
-from markdown_chunkify.core.models import BaseParser
+from markdown_chunkify.core.interfaces import BaseParser
 
 
 class PyMuPDFMParser(BaseParser):
