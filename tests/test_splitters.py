@@ -1,18 +1,18 @@
 import pytest
 
-from markdown_chunkify.utils.splitters import MarkdownSplitter
+from markdown_chunkify.components.splitters import MarkdownSplitter
 
 
 def test_empty_input(splitter):
     """ "Test empty input for the MarkdownSplitter."""
-    assert splitter.split_markdown("") == []
-    assert splitter.split_markdown("   ") == []
+    assert splitter.split_text("") == []
+    assert splitter.split_text("   ") == []
 
 
 def test_single_header(splitter):
     """Test a single header in a sample markdown text."""
     text = "# Header\nContent"
-    sections = splitter.split_markdown(text)
+    sections = splitter.split_text(text)
     assert len(sections) == 1
     assert sections[0].section_header == "Header"
     assert sections[0].section_text == "Content"
@@ -22,7 +22,7 @@ def test_single_header(splitter):
 def test_multiple_headers_same_level(splitter):
     """Test multiple headers at the same level in a sample markdown text."""
     text = "# H1\nC1\n# H2\nC2"
-    sections = splitter.split_markdown(text)
+    sections = splitter.split_text(text)
     assert len(sections) == 2
     assert [s.section_header for s in sections] == ["H1", "H2"]
     assert [s.section_text for s in sections] == ["C1", "C2"]
@@ -30,7 +30,7 @@ def test_multiple_headers_same_level(splitter):
 
 def test_nested_headers(splitter, nested_markdown):
     """Test nested headers in a sample markdown text."""
-    sections = splitter.split_markdown(nested_markdown)
+    sections = splitter.split_text(nested_markdown)
     assert len(sections) == 3
     assert [s.header_level for s in sections] == [1, 2, 3]
     assert sections[2].metadata["parents"]["h1"] == "Main"
@@ -39,7 +39,7 @@ def test_nested_headers(splitter, nested_markdown):
 
 def test_parent_headers(splitter, sample_markdown):
     """Test parent headers in a sample markdown text."""
-    sections = splitter.split_markdown(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     assert sections[1].metadata["parents"]["h1"] == "Header 1"
     assert sections[-1].metadata["parents"]["h1"] == "Header 2"
     assert sections[-1].metadata["parents"]["h2"] == "Header 2.1"
@@ -47,7 +47,7 @@ def test_parent_headers(splitter, sample_markdown):
 
 def test_number_of_sections(splitter, sample_markdown):
     """Test the number of sections in a sample markdown text."""
-    sections = splitter.split_markdown(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     assert len(sections) == 5
 
 
@@ -76,14 +76,14 @@ def test_is_directory(tmp_path):
 def test_header_level_counting(splitter):
     """Test header level counting in a sample markdown text."""
     text = "### Header"
-    sections = splitter.split_markdown(text)
+    sections = splitter.split_text(text)
     assert sections[0].header_level == 3
 
 
 def test_metadata_structure(splitter):
     """Test metadata structure in a sample markdown text."""
     text = "# H1\n## H2"
-    sections = splitter.split_markdown(text)
+    sections = splitter.split_text(text)
 
     assert all("parents" in section.metadata for section in sections)
     assert all(isinstance(section.metadata["parents"], dict) for section in sections)
@@ -93,7 +93,7 @@ def test_metadata_structure(splitter):
 
 def test_to_dict(splitter, sample_markdown):
     """Test to_dict method in a sample markdown text."""
-    sections = splitter.split_markdown(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     assert sections[0].to_dict() == {
         "section_header": "Header 1",
         "section_text": "Content 1",
@@ -104,5 +104,5 @@ def test_to_dict(splitter, sample_markdown):
 
 def test_to_markdown(splitter, sample_markdown):
     """Test to_markdown method in a sample markdown text."""
-    sections = splitter.split_markdown(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     assert sections[0].to_markdown() == "# Header 1\n\nContent 1"
