@@ -26,7 +26,7 @@ poetry run pytest tests -vv
 
 ### Environment Variables
 
-The following environment variables are required for the `GeminiNormalizer` component.
+The following environment variables are required for the `UnicodeReplaceProcessor` component.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
