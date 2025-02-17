@@ -35,9 +35,9 @@ class BaseSplitter(ABC):
         pass
 
 
-class BaseNormalizer(ABC, Generic[T]):
+class BaseProcessor(ABC, Generic[T]):
     @abstractmethod
-    def normalize_unicode(self, content: T) -> T:
+    def process_text(self, section: T) -> T:
         """Normalize Unicode characters.
 
         Args:

@@ -9,7 +9,7 @@ from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
 from vertexai.generative_models import GenerationResponse
 
-from markdown_chunkify.core.interfaces import BaseNormalizer
+from markdown_chunkify.core.interfaces import BaseProcessor
 from markdown_chunkify.core.models import MarkdownContent
 from markdown_chunkify.core.models import Section
 from markdown_chunkify.core.models import SectionMetadata
@@ -51,7 +51,7 @@ DEFAULT_GENERATION_CONFIG = types.GenerateContentConfig(
 )
 
 
-class GeminiNormalizer(BaseNormalizer):
+class UnicodeReplaceProcessor(BaseProcessor):
     """A Gemini powered class to process Markdown text."""
 
     def __init__(
@@ -61,7 +61,7 @@ class GeminiNormalizer(BaseNormalizer):
         instructions: str | None = None,
         retry_config: RetryConfig | None = None,
     ):
-        """Initialize the normalizer.
+        """Initialize the UnicodeReplaceProcessor.
 
         Args:
             model (genai.GenerativeModel): A GenerativeModel instance.
@@ -90,7 +90,7 @@ class GeminiNormalizer(BaseNormalizer):
             retry_error_callback=self.retry_config.retry_error_callback,
         )
 
-    def normalize_unicode(self, section: Section) -> Section:
+    def process_text(self, section: Section) -> Section:
         """Wrapper method to normalize Unicode characters in Markdown.
 
         Args:
