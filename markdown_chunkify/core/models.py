@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from pydantic import Field
 
 
-class NormalizedSection(BaseModel):
+class GeneratedSection(BaseModel):
     """Data model containing a text string."""
 
     section_header: str = Field(..., description="The Markdown section header")
