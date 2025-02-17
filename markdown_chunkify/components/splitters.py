@@ -5,7 +5,8 @@ from typing import Optional
 from typing import Union
 
 from markdown_chunkify.core.interfaces import BaseSplitter
-from markdown_chunkify.core.models import MarkdownSection
+from markdown_chunkify.core.models import Section
+from markdown_chunkify.core.models import SectionMetadata
 from markdown_chunkify.core.settings import logger
 
 
@@ -29,6 +30,7 @@ class MarkdownSplitter(BaseSplitter):
                 parents[f"h{level}"] = header
                 logger.debug(f"H{level} parent found: {header}.")
 
+        logger.debug(f"Found parents: {parents}.")
         return parents
 
     def _process_code_blocks(self, text: str) -> tuple[str, dict[str, str]]:
@@ -78,14 +80,14 @@ class MarkdownSplitter(BaseSplitter):
 
         return processed_text, replacement_map
 
-    def split_text(self, text: str) -> list[MarkdownSection]:
+    def split_text(self, text: str) -> list[Section]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Args:
             text: Markdown text to split
 
         Returns:
-            list[MarkdownSection]: List of markdown sections with hierarchy information
+            list[Section]: List of markdown sections with hierarchy information
         """
         if not text.strip():
             logger.warning("`split_text` received empty text input.")
@@ -127,24 +129,22 @@ class MarkdownSplitter(BaseSplitter):
 
             # Create section with parent information
             parent_headers = self._find_parent_headers(current_level, header_stack)
-            section = MarkdownSection.create(
-                header=header_text,
-                text=section_text,
+            metadata = SectionMetadata(parents=parent_headers)
+            section = Section(
+                section_header=header_text,
+                section_text=section_text,
                 header_level=current_level,
-                parent_headers=parent_headers,
+                metadata=metadata,
             )
 
             # Remove empty parent headers from metadata
-            section.metadata["parents"] = {
-                k: v for k, v in section.metadata["parents"].items() if v is not None
+            section.metadata.parents = {
+                k: v for k, v in section.metadata.parents.items() if v is not None
             }
 
             logger.debug(f"Created section: {section.section_header}.")
-            metadata = section.metadata
-            if metadata.get("parents"):
-                logger.debug(
-                    f"Section {section.section_header} parents: {metadata['parents']}."
-                )
+            if metadata.parents:
+                logger.debug(f"Section {section.section_header} parents: {metadata.parents}.")
 
             sections.append(section)
 
@@ -153,16 +153,14 @@ class MarkdownSplitter(BaseSplitter):
         return sections
 
     @classmethod
-    def from_file(
-        cls, filepath: Union[str, Path], encoding: str = "utf-8"
-    ) -> list[MarkdownSection]:
+    def from_file(cls, filepath: Union[str, Path], encoding: str = "utf-8") -> list[Section]:
         """Split Markdown text from a file by headers.
 
         Args:
             filepath (Union[str, Path]): Path to the Markdown file.
 
         Returns:
-            list[MarkdownSection]: List of markdown sections with hierarchy information.
+            list[Section]: List of markdown sections with hierarchy information.
 
         Raises:
             FileNotFoundError: If the specified file does not exist.
