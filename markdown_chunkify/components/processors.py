@@ -153,6 +153,8 @@ class UnicodeReplaceProcessor(BaseProcessor):
         try:
             response_text = json.loads(generation_response.text)
             response_obj = generation_response.to_json_dict()
+            response_usage = response_obj.get("usage_metadata", {})
+            token_count = response_usage.get("candidates_token_count", 0)
 
             logger.info(
                 f"Successfully replaced the Unicode characters in section: {original_section.section_header}"
@@ -162,7 +164,16 @@ class UnicodeReplaceProcessor(BaseProcessor):
                 section_header=response_text["section_header"],
                 section_text=response_text["section_text"],
                 header_level=original_section.header_level,
-                metadata=self._create_metadata(response_obj, original_section),
+                metadata=SectionMetadata(
+                    token_count=token_count,
+                    model_version=response_obj.get("model_version"),
+                    normalized=True,
+                    original_content=MarkdownContent(
+                        section_header=original_section.section_header,
+                        section_text=original_section.section_text,
+                    ),
+                    parents=original_section.metadata.parents,
+                ),
             )
 
         except Exception as e:
@@ -173,27 +184,3 @@ class UnicodeReplaceProcessor(BaseProcessor):
             original_section.metadata.error = str(e)
 
             return original_section
-
-    def _create_metadata(self, response_obj: dict, original_section: Section) -> dict:
-        """Create metadata dictionary for normalized section.
-
-        Args:
-            response_obj (dict): The response object from the API
-            original_section (MarkdownSection): The original section to be normalized
-
-        Returns:
-            dict: A dictionary containing metadata for the normalized section
-        """
-        response_usage = response_obj.get("usage_metadata", {})
-        token_count = response_usage.get("candidates_token_count", 0)
-
-        return SectionMetadata(
-            token_count=token_count,
-            model_version=response_obj.get("model_version"),
-            normalized=True,
-            original_content=MarkdownContent(
-                section_header=original_section.section_header,
-                section_text=original_section.section_text,
-            ),
-            parents=original_section.metadata.parents,
-        )

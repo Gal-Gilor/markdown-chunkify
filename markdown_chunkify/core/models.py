@@ -1,5 +1,8 @@
+import re
+
 from pydantic import BaseModel
 from pydantic import Field
+from pydantic import field_validator
 
 
 class MarkdownContent(BaseModel):
@@ -7,6 +10,11 @@ class MarkdownContent(BaseModel):
 
     section_header: str = Field(..., description="The Markdown section header")
     section_text: str = Field(..., description="The Markdown section content")
+
+    @field_validator("section_header")
+    def clean_section_header(cls, value):
+        """Remove leading and trailing whitespace from the section header."""
+        return re.sub(r"^#+\s*", "", value)
 
 
 class SectionMetadata(BaseModel):
