@@ -1,51 +1,13 @@
-import json
 import os
 import re
-from dataclasses import asdict
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 from typing import Union
 
-from markdown_chunkify.core.models import BaseSplitter
-
-
-@dataclass
-class MarkdownSection:
-    """Represents a section in a Markdown document with its header hierarchy."""
-
-    section_header: str
-    section_text: str
-    header_level: int
-    metadata: dict[str, dict[str, Optional[str]]]
-
-    @classmethod
-    def create(
-        cls,
-        header: str,
-        text: str,
-        header_level: int,
-        parent_headers: dict[str, Optional[str]],
-    ) -> "MarkdownSection":
-        """Factory method to create a MarkdownSection with proper metadata structure."""
-        return cls(
-            section_header=header,
-            section_text=text,
-            header_level=header_level,
-            metadata={"parents": parent_headers},
-        )
-
-    def to_dict(self) -> dict:
-        """Convert the section to a dictionary for JSON serialization."""
-        return asdict(self)
-
-    def to_markdown(self) -> str:
-        """Convert the section to a Markdown string."""
-        return f"{'#' * self.header_level} {self.section_header}\n\n{self.section_text}"
-
-    def __str__(self) -> str:
-        """Return a pretty-printed JSON representation of the section."""
-        return json.dumps(asdict(self), indent=2)
+from markdown_chunkify.core.interfaces import BaseSplitter
+from markdown_chunkify.core.models import Section
+from markdown_chunkify.core.models import SectionMetadata
+from markdown_chunkify.core.settings import logger
 
 
 class MarkdownSplitter(BaseSplitter):
@@ -60,12 +22,15 @@ class MarkdownSplitter(BaseSplitter):
     ) -> dict[str, Optional[str]]:
         """Find parent headers for the current header level."""
         # Initialize all parent levels as None
+        logger.debug(f"Finding parents for header level: {current_level}.")
         parents = {f"h{i}": None for i in range(1, 5)}
 
         for level, header in header_stack:
             if level < current_level:  # Allow only H1 - H4 headers as parents
                 parents[f"h{level}"] = header
+                logger.debug(f"H{level} parent found: {header}.")
 
+        logger.debug(f"Found parents: {parents}.")
         return parents
 
     def _process_code_blocks(self, text: str) -> tuple[str, dict[str, str]]:
@@ -79,6 +44,7 @@ class MarkdownSplitter(BaseSplitter):
                 - str: Processed text with code comments replaced by tokens
                 - dict: Mapping of tokens to their original comment text
         """
+        logger.debug("Replacing code comments with tokens in code blocks")
         replacement_map = {}
         counter = 0
 
@@ -103,6 +69,8 @@ class MarkdownSplitter(BaseSplitter):
                 else:
                     processed_lines.append(line)
 
+            logger.debug(f"Processed code block:\n{os.linesep.join(processed_lines)}.")
+
             return f"```{os.linesep.join(processed_lines)}```"
 
         # Process all code blocks in the text
@@ -112,30 +80,35 @@ class MarkdownSplitter(BaseSplitter):
 
         return processed_text, replacement_map
 
-    def split_text(self, text: str) -> list[MarkdownSection]:
+    def split_text(self, text: str) -> list[Section]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Args:
             text: Markdown text to split
 
         Returns:
-            list[MarkdownSection]: List of markdown sections with hierarchy information
+            list[Section]: List of markdown sections with hierarchy information
         """
         if not text.strip():
+            logger.warning("`split_text` received empty text input.")
             return []
 
         # Replace # wrapped in backticks with {{{{CODE_COMMENT}}}} tokens
+        logger.info("Splitting Markdown text by headers.")
         processed_text, replacement_map = self._process_code_blocks(text)
 
         # Find all headers with their positions
         headers = list(self._header_pattern.finditer(processed_text))
-        sections = []
-        header_stack: list[tuple[int, str]] = []
+        logger.debug(f"Found {len(headers)} headers in the text.")
 
+        header_stack: list[tuple[int, str]] = []
+        sections = []
         for i, match in enumerate(headers):
             header_marks = match.group(1)
             header_text = match.group(2).strip()
             current_level = len(header_marks)
+
+            logger.debug(f"Processing header: {header_text} at level {current_level}.")
 
             # Extract section content (text between current header and next one)
             start_pos = match.end()
@@ -148,38 +121,46 @@ class MarkdownSplitter(BaseSplitter):
 
             # Update header hierarchy
             while header_stack and header_stack[-1][0] >= current_level:
+                logger.debug(f"Removing header: {header_stack[-1][1]} from stack.")
                 header_stack.pop()
+
+            # Add current header to the stack
             header_stack.append((current_level, header_text))
 
             # Create section with parent information
             parent_headers = self._find_parent_headers(current_level, header_stack)
-            section = MarkdownSection.create(
-                header=header_text,
-                text=section_text,
+            metadata = SectionMetadata(parents=parent_headers)
+            section = Section(
+                section_header=header_text,
+                section_text=section_text,
                 header_level=current_level,
-                parent_headers=parent_headers,
+                metadata=metadata,
             )
 
             # Remove empty parent headers from metadata
-            section.metadata["parents"] = {
-                k: v for k, v in section.metadata["parents"].items() if v is not None
+            section.metadata.parents = {
+                k: v for k, v in section.metadata.parents.items() if v is not None
             }
 
+            logger.debug(f"Created section: {section.section_header}.")
+            if metadata.parents:
+                logger.debug(f"Section {section.section_header} parents: {metadata.parents}.")
+
             sections.append(section)
+
+        logger.info(f"Successfully split the Markdown into {len(sections)} sections.")
 
         return sections
 
     @classmethod
-    def from_file(
-        cls, filepath: Union[str, Path], encoding: str = "utf-8"
-    ) -> list[MarkdownSection]:
+    def from_file(cls, filepath: Union[str, Path], encoding: str = "utf-8") -> list[Section]:
         """Split Markdown text from a file by headers.
 
         Args:
             filepath (Union[str, Path]): Path to the Markdown file.
 
         Returns:
-            list[MarkdownSection]: List of markdown sections with hierarchy information.
+            list[Section]: List of markdown sections with hierarchy information.
 
         Raises:
             FileNotFoundError: If the specified file does not exist.
@@ -187,11 +168,22 @@ class MarkdownSplitter(BaseSplitter):
         """
         path = Path(filepath)
         if not path.exists():
-            raise FileNotFoundError(f"Markdown file not found: {path}")
+            error_message = f"Unable to find the Markdown in the specified location: {path}"
+            logger.error(error_message)
+            raise FileNotFoundError(error_message)
 
         if path.is_dir():
-            raise IsADirectoryError(f"Path to Markdown file is a directory: {path}")
+            error_message = f"The provided path is a directory: {path}"
+            logger.error(error_message)
+            raise IsADirectoryError(error_message)
 
-        splitter = cls()
-        with path.open("r", encoding=encoding) as f:
-            return splitter.split_text(f.read())
+        try:
+            splitter = cls()
+            with path.open("r", encoding=encoding) as f:
+                return splitter.split_text(f.read())
+
+        except Exception as e:
+            logger.error(
+                f"Failed to split the Markdown file: {path}. Error: {str(e)}", exc_info=True
+            )
+            raise
