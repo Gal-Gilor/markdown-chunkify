@@ -33,16 +33,16 @@ def test_nested_headers(splitter, nested_markdown):
     sections = splitter.split_text(nested_markdown)
     assert len(sections) == 3
     assert [s.header_level for s in sections] == [1, 2, 3]
-    assert sections[2].metadata["parents"]["h1"] == "Main"
-    assert sections[2].metadata["parents"]["h2"] == "Sub"
+    assert sections[2].metadata.parents["h1"] == "Main"
+    assert sections[2].metadata.parents["h2"] == "Sub"
 
 
 def test_parent_headers(splitter, sample_markdown):
     """Test parent headers in a sample markdown text."""
     sections = splitter.split_text(sample_markdown)
-    assert sections[1].metadata["parents"]["h1"] == "Header 1"
-    assert sections[-1].metadata["parents"]["h1"] == "Header 2"
-    assert sections[-1].metadata["parents"]["h2"] == "Header 2.1"
+    assert sections[1].metadata.parents["h1"] == "Header 1"
+    assert sections[-1].metadata.parents["h1"] == "Header 2"
+    assert sections[-1].metadata.parents["h2"] == "Header 2.1"
 
 
 def test_number_of_sections(splitter, sample_markdown):
@@ -85,21 +85,9 @@ def test_metadata_structure(splitter):
     text = "# H1\n## H2"
     sections = splitter.split_text(text)
 
-    assert all("parents" in section.metadata for section in sections)
-    assert all(isinstance(section.metadata["parents"], dict) for section in sections)
-    assert sections[0].metadata["parents"] == {}
-    assert "h1" in sections[1].metadata["parents"]
-
-
-def test_to_dict(splitter, sample_markdown):
-    """Test to_dict method in a sample markdown text."""
-    sections = splitter.split_text(sample_markdown)
-    assert sections[0].to_dict() == {
-        "section_header": "Header 1",
-        "section_text": "Content 1",
-        "header_level": 1,
-        "metadata": {"parents": {}},
-    }
+    assert all(isinstance(section.metadata.parents, dict) for section in sections)
+    assert sections[0].metadata.parents == {}
+    assert "h1" in sections[1].metadata.parents
 
 
 def test_to_markdown(splitter, sample_markdown):
