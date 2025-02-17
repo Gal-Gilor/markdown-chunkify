@@ -1,4 +1,5 @@
+from markdown_chunkify.components.normalizers import GeminiNormalizer
 from markdown_chunkify.components.parsers import PyMuPDFMParser
 from markdown_chunkify.components.splitters import MarkdownSplitter
 
-__all__ = ["MarkdownSplitter", "PyMuPDFMParser"]
+__all__ = ["MarkdownSplitter", "PyMuPDFMParser", "GeminiNormalizer"]

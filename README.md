@@ -1,11 +1,12 @@
 # MarkdownSplitter
 
-A Python library that splits Markdown into hierarchical sections. It intelligently handles code blocks, and maintains references to the section's parent headers, making it easier to manage and analyze, and embed Markdown text.
+A Python library that splits Markdown into hierarchical sections. It intelligently handles code blocks, normalizes Unicode characters, and maintains parent-child relationships between sections.
 
-## Why MarkdownSplitter?
+## Features
 
-- **Code-Aware**: Prevents splitting text wrapped in code blocks, ensuring content integrity.
-- **Hierarchy Tracking**: Automatically tracks and stores parent headers for each section.
+- **Code-Aware**: Preserves code blocks and comments while processing markdown
+- **Hierarchy Tracking**: Automatically tracks parent headers for each section (H1-H4)
+- **Unicode Normalization**: Converts non-ASCII characters to their ASCII equivalents
 
 ## Installation
 
@@ -13,55 +14,80 @@ A Python library that splits Markdown into hierarchical sections. It intelligent
 pip install -e .
 ```
 
-For development setup:
+For Development Setup:
 ```bash
 git clone https://github.com/Gal-Gilor/markdown-chunkify.git
 cd markdown-chunkify
 poetry install
-poetry run pytest /tests -vv
+poetry run pytest tests -vv
 ```
+
+## Configuration
+
+### Environment Variables
+
+The following environment variables are required for the `GeminiNormalizer` component.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `GOOGLE_API_KEY` | A Gemini API key | `None` |
+| `GEMINI_MODEL_NAME` | A Gemini model name | `gemini-2.0-flash` | 
+
 
 ## Usage
 
 ```python
-from markdown_splitter import MarkdownSplitter
+from markdown_chunkify import MarkdownSplitter
+from markdown_chunkify import PyMuPDFMParser
 
 
+# Convert PDF to Markdown
+markdown_text = PyMuPDFMParser.to_markdown(
+    file_path="document.pdf",
+    destination_path="document.md"  # Optional
+)
+
+# Initialize splitter
 splitter = MarkdownSplitter()
 
-# From file
-sections = MarkdownSplitter.from_file('document.md')
-# From text
-sections = splitter.split_text(text)
+# Split from file
+sections = splitter.from_file('document.md')
+
+# Split from text
+sections = splitter.split_text(markdown_text)
 ```
 
-## MarkdownSection
+## Data Models
 
-The fundamental data structure representing a Markdown section:
-
+**MarkdownContent:** The base data structure representing a Markdown section. It contains the header and content of a section. It's used as a base class for the `Section` model, and as a generation schema for structured output responses
 ```python
-@dataclass
-class MarkdownSection:
-    section_header: str         # Header text (without #)
-    section_text: str           # Content below header
-    header_level: int           # Number of # symbols (1-4)
-    metadata: dict[str, str]    # Hierarchical information
+class MarkdownContent(BaseModel):
+    section_header: str                         # The header of the section (without #)
+    section_text: str                           # The content of the section
 ```
 
-### Metadata Structure
-
-Parent headers are tracked in `metadata['parents']`:
+**Section:** The primary data structure representing a Markdown section. It contains the header level, metadata, and content of a section.
 ```python
-{
-    'h1': 'Parent H1 Header',
-    'h2': 'Parent H2 Header',
-    # ... up to h4
-}
+class Section(MarkdownContent):
+    header_level: int                           # Number of # symbols (1-4)
+    metadata: SectionMetadata                   # Processing and hierarchy information
+
+    def to_markdown(self) -> str:               # Convert section back to Markdown
+```
+
+**SectionMetadata:** A Section's metadata, containing information about the section's processing and hierarchy (i.e., from information about the parent headers and text normalization status).
+```python
+class SectionMetadata(BaseModel):
+    token_count: int | None                     # Generation token count
+    model_version: str | None                   # Model used for normalization
+    normalized: bool                            # Whether Unicode normalization succeeded
+    error: str | None                           # Error message if normalization failed
+    original_content: MarkdownContent | None    # Pre-normalization content
+    parents: dict[str, str | None]              # Header hierarchy information
 ```
 
 ### Methods
-- `create()`: Factory method for proper instantiation
-- `to_dict()`: Convert to dictionary
+
 - `to_markdown()`: Convert to Markdown format
 
 ## Requirements
