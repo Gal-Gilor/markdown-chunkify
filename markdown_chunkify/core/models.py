@@ -27,11 +27,15 @@ class SectionMetadata(BaseModel):
     )
     error: str | None = Field(None, description="Error message if normalization failed")
     original_content: MarkdownContent | None = Field(
-        None, description="The original section content if the section was normalized"
+        None, description="The original section content if thew section was normalized"
     )
     parents: dict[str, str | None] = Field(
         default_factory=dict,
         description="Parent headers hierarchy for the section",
+    )
+    siblings: list[str] = Field(
+        default_factory=list,
+        description="List of sibling section headers at the same level with same parent",
     )
 
 
