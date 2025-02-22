@@ -31,8 +31,8 @@ def test_multiple_headers_same_level(splitter):
 def test_nested_headers(splitter, nested_markdown):
     """Test nested headers in a sample markdown text."""
     sections = splitter.split_text(nested_markdown)
-    assert len(sections) == 3
-    assert [s.header_level for s in sections] == [1, 2, 3]
+    assert len(sections) == 4
+    assert [s.header_level for s in sections] == [1, 2, 3, 2]
     assert sections[2].metadata.parents["h1"] == "Main"
     assert sections[2].metadata.parents["h2"] == "Sub"
 
@@ -41,14 +41,15 @@ def test_parent_headers(splitter, sample_markdown):
     """Test parent headers in a sample markdown text."""
     sections = splitter.split_text(sample_markdown)
     assert sections[1].metadata.parents["h1"] == "Header 1"
-    assert sections[-1].metadata.parents["h1"] == "Header 2"
-    assert sections[-1].metadata.parents["h2"] == "Header 2.1"
+    assert sections[-2].metadata.parents["h1"] == "Header 2"
+    assert sections[-2].metadata.parents["h2"] == "Header 2.1"
 
 
-def test_number_of_sections(splitter, sample_markdown):
-    """Test the number of sections in a sample markdown text."""
+def test_sibling_headers(splitter, sample_markdown):
+    """Test sibling headers in a sample markdown text."""
     sections = splitter.split_text(sample_markdown)
-    assert len(sections) == 5
+    sections[-3].metadata.siblings = ["Header 2.2"]
+    assert sections[-1].metadata.siblings == ["Header 2.1"]
 
 
 def test_file_operations(tmp_path):
