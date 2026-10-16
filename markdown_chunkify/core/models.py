@@ -13,8 +13,8 @@ class MarkdownContent(BaseModel):
 
     @field_validator("section_header")
     def clean_section_header(cls, value):
-        """Remove leading and trailing whitespace from the section header."""
-        return re.sub(r"^#+\s*", "", value)
+        """Remove leading '#' markers from the section header."""
+        return re.sub(r"^#+\s+", "", value)
 
 
 class SectionMetadata(BaseModel):
@@ -42,7 +42,11 @@ class SectionMetadata(BaseModel):
 class Section(MarkdownContent):
     """Represents a section in a Markdown document with its header hierarchy."""
 
-    header_level: int = Field(..., description="The level of the header (number of #)")
+    header_level: int = Field(
+        ...,
+        ge=0,
+        description="The level of the header (number of #). 0 for text before the first header.",
+    )
     metadata: SectionMetadata = Field(
         default_factory=SectionMetadata,
         description="The Markdown section metadata.",
@@ -50,4 +54,6 @@ class Section(MarkdownContent):
 
     def to_markdown(self) -> str:
         """Convert the section to a Markdown string."""
+        if self.header_level == 0:
+            return self.section_text
         return f"{'#' * self.header_level} {self.section_header}\n\n{self.section_text}"
