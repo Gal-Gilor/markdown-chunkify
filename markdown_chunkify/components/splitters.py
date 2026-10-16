@@ -17,10 +17,17 @@ MAX_HEADER_LEVEL = 6
 # ATX header: up to 3 spaces of indent, 1-6 '#', whitespace, the header text and an
 # optional closing sequence of '#'.
 _HEADER_PATTERN = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
-# Opening code fence: 3+ backticks or tildes. A backtick fence's info string
+# Opening code fence: 3+ backticks or tildes, at any indentation and optionally after a
+# list marker, so fences inside list items are found. A backtick fence's info string
 # cannot contain backticks.
-_FENCE_OPEN_PATTERN = re.compile(r"^ {0,3}(`{3,}(?!.*`)|~{3,})")
-_FENCE_CLOSE_PATTERN = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+_FENCE_OPEN_PATTERN = re.compile(
+    r"^[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(`{3,}(?!.*`)|~{3,})"
+)
+_FENCE_CLOSE_PATTERN = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*$")
+# An HTML comment block starts with '<!--' at the start of a line and ends on the line
+# that contains '-->'.
+_HTML_COMMENT_OPEN_PATTERN = re.compile(r"^ {0,3}<!--")
+_FRONT_MATTER_DELIMITERS = ("---", "...")
 _LEADING_BLANK_LINES_PATTERN = re.compile(r"^\s*\n")
 
 
@@ -36,10 +43,22 @@ class MarkdownSplitter(BaseSplitter):
         - Splits Markdown text into sections based on headers
         - Maintains parent-child relationships between headers
         - Tracks sibling headers at the same level
-        - Ignores lines inside fenced code blocks (``` or ~~~), so comments are not headers
+        - Ignores lines inside fenced code blocks (``` or ~~~), HTML comment blocks and
+          YAML front matter, so '#' lines there are not headers
         - Keeps section text exactly as written, including code blocks
         - Returns text before the first header as a level-0 section with an empty header
         - Supports headers up to level 6, or a lower limit set with `max_level`
+        - Optionally caps each sibling list with `max_siblings`
+
+    Limitations:
+        - Only ATX headers ('#' to '######') are recognized. Setext headers, underlined
+          with '===' or '---', are kept as text.
+        - Headers and fences inside blockquotes ('> # Title') are not recognized.
+        - A line indented by 4 or more spaces that starts with ``` or ~~~ is treated as a
+          fence, even when it is part of an indented code block.
+        - Without `max_siblings`, a section lists every other header at its level under
+          the same parent. With n such headers, the sibling lists hold n * (n - 1) names,
+          which gets slow for thousands of headers at one level.
 
     Example:
         >>> splitter = MarkdownSplitter()
@@ -75,16 +94,22 @@ class MarkdownSplitter(BaseSplitter):
         Siblings: ['Installation']
     """
 
-    def __init__(self, max_level: int = MAX_HEADER_LEVEL):
+    def __init__(self, max_level: int = MAX_HEADER_LEVEL, max_siblings: int | None = None):
         """Initialize the splitter.
 
         Args:
             max_level (int): The deepest header level to split on (1-6). Deeper headers
                 are kept as text of the enclosing section.
+            max_siblings (int | None): The maximum number of siblings listed per section.
+                The siblings nearest to the section in document order are kept. None
+                lists every sibling.
         """
         if not 1 <= max_level <= MAX_HEADER_LEVEL:
             raise ValueError(f"max_level must be between 1 and {MAX_HEADER_LEVEL}.")
+        if max_siblings is not None and max_siblings < 0:
+            raise ValueError("max_siblings must be 0 or greater.")
         self.max_level = max_level
+        self.max_siblings = max_siblings
 
     @staticmethod
     def _closes_fence(line: str, fence: str) -> bool:
@@ -94,10 +119,26 @@ class MarkdownSplitter(BaseSplitter):
             match and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence)
         )
 
-    def _find_headers(self, text: str) -> List[tuple[int, int, int, str]]:
-        """Find the headers outside fenced code blocks.
+    @staticmethod
+    def _front_matter_line_count(lines: List[str]) -> int:
+        """Count the lines of YAML front matter at the start of the document.
 
-        An unclosed fence runs to the end of the document.
+        Front matter starts with a '---' line and ends with a '---' or '...' line. Without
+        a closing line, the opening '---' is a thematic break and 0 is returned.
+        """
+        if not lines or lines[0].rstrip("\r") != _FRONT_MATTER_DELIMITERS[0]:
+            return 0
+
+        for index, line in enumerate(lines[1:], start=1):
+            if line.rstrip("\r") in _FRONT_MATTER_DELIMITERS:
+                return index + 1
+
+        return 0
+
+    def _find_headers(self, text: str) -> List[tuple[int, int, int, str]]:
+        """Find the headers outside fenced code blocks, HTML comments and front matter.
+
+        An unclosed fence or HTML comment runs to the end of the document.
 
         Returns:
             List[tuple[int, int, int, str]]: For each header, the offset where its line
@@ -105,16 +146,30 @@ class MarkdownSplitter(BaseSplitter):
         """
         headers = []
         fence = None
+        in_html_comment = False
         position = 0
+        lines = text.split("\n")
+        front_matter_line_count = self._front_matter_line_count(lines)
 
-        for line in text.split("\n"):
+        for index, line in enumerate(lines):
             line_start = position
             position += len(line) + 1
             line = line.rstrip("\r")
 
+            if index < front_matter_line_count:
+                continue
+
             if fence:
                 if self._closes_fence(line, fence):
                     fence = None
+                continue
+
+            if in_html_comment:
+                in_html_comment = "-->" not in line
+                continue
+
+            if _HTML_COMMENT_OPEN_PATTERN.match(line):
+                in_html_comment = "-->" not in line[line.index("<!--") + 4 :]
                 continue
 
             if fence_match := _FENCE_OPEN_PATTERN.match(line):
@@ -133,16 +188,31 @@ class MarkdownSplitter(BaseSplitter):
         """Remove leading blank lines and trailing whitespace, keeping indentation."""
         return _LEADING_BLANK_LINES_PATTERN.sub("", text).rstrip()
 
-    @staticmethod
-    def _set_siblings(nodes: List[Dict]) -> None:
+    def _nearest_siblings(self, names: List[str], index: int) -> List[str]:
+        """Return the names around `index`, without it, capped at `max_siblings`."""
+        if self.max_siblings is None or self.max_siblings >= len(names) - 1:
+            return names[:index] + names[index + 1 :]
+
+        # A window of max_siblings + 1 names that contains index, centered where possible.
+        # With an odd max_siblings, the extra sibling comes from before the section.
+        last_start = len(names) - 1 - self.max_siblings
+        start = min(max(0, index - (self.max_siblings + 1) // 2), last_start)
+        end = start + self.max_siblings + 1
+        return names[start:index] + names[index + 1 : end]
+
+    def _set_siblings(self, nodes: List[Dict]) -> None:
         """Set each node's siblings: other nodes at the same level under the same parent."""
-        for index, node in enumerate(nodes):
-            node["siblings"] = [
-                other["header"]
-                for other_index, other in enumerate(nodes)
-                if other_index != index and other["level"] == node["level"]
-            ]
-            MarkdownSplitter._set_siblings(node["children"])
+        nodes_by_level = {}
+        for node in nodes:
+            nodes_by_level.setdefault(node["level"], []).append(node)
+
+        for same_level_nodes in nodes_by_level.values():
+            names = [node["header"] for node in same_level_nodes]
+            for index, node in enumerate(same_level_nodes):
+                node["siblings"] = self._nearest_siblings(names, index)
+
+        for node in nodes:
+            self._set_siblings(node["children"])
 
     def get_document_outline(self, text: str) -> List[Dict]:
         """Generate a nested document outline with header hierarchy and sibling relationships.
@@ -343,6 +413,7 @@ class MarkdownSplitter(BaseSplitter):
         filepath: Union[str, Path],
         encoding: str = "utf-8",
         max_level: int = MAX_HEADER_LEVEL,
+        max_siblings: int | None = None,
     ) -> List[Section]:
         """Create sections from a Markdown file."""
         path = Path(filepath)
@@ -357,7 +428,7 @@ class MarkdownSplitter(BaseSplitter):
             raise IsADirectoryError(error_message)
 
         try:
-            splitter = cls(max_level=max_level)
+            splitter = cls(max_level=max_level, max_siblings=max_siblings)
             with path.open("r", encoding=encoding) as f:
                 return splitter.split_text(f.read())
         except Exception as e:
