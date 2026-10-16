@@ -97,7 +97,9 @@ A normalized section has `metadata.normalized` set to `True` and keeps the origi
 
 - Only ATX headers (`#` to `######`) are recognized. Setext headers, underlined with `===` or `---`, stay in the section text.
 - Headers and fences inside blockquotes (`> # Title`) are not recognized.
-- A line indented by 4 or more spaces that starts with ```` ``` ```` or `~~~` is treated as a fence, even inside an indented code block.
+- A line indented by 4 or more spaces that starts with ```` ``` ```` or `~~~` is treated as a fence, even inside an indented code block. If that fence is never closed, the headers after it are treated as text and a warning is logged.
+- An HTML comment is only recognized when `<!--` starts the line. A comment that opens mid-line (`text <!--`) does not hide the `#` lines inside it.
+- A document that starts with `---` is treated as having YAML front matter only if every line up to the next `---` or `...` looks like YAML (`key: value`, `- item`, indented lines, comments or blank lines). Otherwise the `---` is a horizontal rule and the headers after it are split as usual.
 - Without `max_siblings`, each section lists every other header at its level under the same parent. With n such headers, the lists hold n * (n - 1) names: 6,000 headers at one level take a few seconds to split. Set `max_siblings` for documents like that.
 
 ## Data Models

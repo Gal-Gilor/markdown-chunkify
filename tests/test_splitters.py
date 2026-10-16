@@ -365,3 +365,79 @@ def test_from_file_max_siblings(tmp_path):
     sections = MarkdownSplitter.from_file(md_file, max_siblings=1)
 
     assert [s.metadata.siblings for s in sections] == [["B"], ["A"], ["B"]]
+
+
+def test_byte_order_mark_in_text(splitter):
+    """A UTF-8 byte order mark before the first header does not hide it."""
+    sections = splitter.split_text("﻿# Title\nText")
+
+    assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
+
+
+def test_byte_order_mark_in_outline(splitter):
+    """get_document_outline also ignores a byte order mark."""
+    outline = splitter.get_document_outline("﻿# Title\nText")
+
+    assert [(node["level"], node["header"]) for node in outline] == [(1, "Title")]
+
+
+def test_byte_order_mark_in_file(tmp_path):
+    """from_file reads a UTF-8 file with a byte order mark."""
+    md_file = tmp_path / "bom.md"
+    md_file.write_bytes("﻿# Title\nText".encode("utf-8"))
+
+    sections = MarkdownSplitter.from_file(md_file)
+
+    assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
+    assert sections[0].section_text == "Text"
+
+
+def test_front_matter_with_lists_and_comments(splitter):
+    """YAML front matter with lists, nested keys and comments is skipped."""
+    front_matter = (
+        "---\ntitle: Guide\ntags:\n  - one\n- two\n# A YAML comment\nauthor:\n"
+        "  name: Gal\n\n..."
+    )
+    sections = splitter.split_text(f"{front_matter}\n# Real\nText")
+
+    assert [s.section_header for s in sections] == ["", "Real"]
+    assert sections[0].section_text == front_matter
+
+
+def test_horizontal_rules_are_not_front_matter(splitter):
+    """Two '---' lines around Markdown content are horizontal rules, not front matter."""
+    sections = splitter.split_text("---\n# A\ntext\n---\n# B")
+
+    assert [s.section_header for s in sections] == ["", "A", "B"]
+    assert sections[1].section_text == "text\n---"
+
+
+@pytest.mark.parametrize(
+    "text, block, line_number",
+    [
+        ("# A\n    ```\n# B", "code fence", 2),
+        ("# A\nText\n<!--\n# B", "HTML comment", 3),
+    ],
+)
+def test_unclosed_block_logs_warning(splitter, caplog, text, block, line_number):
+    """An unclosed fence or HTML comment logs a warning naming where it starts."""
+    with caplog.at_level("WARNING", logger="markdown_chunkify"):
+        sections = splitter.split_text(text)
+
+    assert [s.section_header for s in sections] == ["A"]
+    assert f"The {block} that starts on line {line_number} is never closed" in caplog.text
+
+
+def test_closed_blocks_do_not_warn(splitter, caplog):
+    """Closed fences and HTML comments do not log a warning."""
+    with caplog.at_level("WARNING", logger="markdown_chunkify"):
+        splitter.split_text("# A\n```\ncode\n```\n<!--\nnote\n-->\n# B")
+
+    assert caplog.text == ""
+
+
+def test_mid_line_html_comment_is_not_recognized(splitter):
+    """A comment that opens mid-line does not hide the '#' lines inside it."""
+    sections = splitter.split_text("# A\ntext <!--\n# B\n-->")
+
+    assert [s.section_header for s in sections] == ["A", "B"]

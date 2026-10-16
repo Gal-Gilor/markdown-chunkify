@@ -28,6 +28,12 @@ _FENCE_CLOSE_PATTERN = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*$")
 # that contains '-->'.
 _HTML_COMMENT_OPEN_PATTERN = re.compile(r"^ {0,3}<!--")
 _FRONT_MATTER_DELIMITERS = ("---", "...")
+# A line that can appear in YAML front matter: a 'key:' entry, a '- ' list item, an
+# indented continuation, a YAML comment or a blank line.
+_FRONT_MATTER_LINE_PATTERN = re.compile(
+    r"^(?:[\w\"'][^:]*:(?:[ \t]|$)|-(?:[ \t]|$)|[ \t#]|$)"
+)
+_BYTE_ORDER_MARK = "\ufeff"
 _LEADING_BLANK_LINES_PATTERN = re.compile(r"^\s*\n")
 
 
@@ -55,7 +61,10 @@ class MarkdownSplitter(BaseSplitter):
           with '===' or '---', are kept as text.
         - Headers and fences inside blockquotes ('> # Title') are not recognized.
         - A line indented by 4 or more spaces that starts with ``` or ~~~ is treated as a
-          fence, even when it is part of an indented code block.
+          fence, even when it is part of an indented code block. If such a fence is never
+          closed, the headers after it are treated as text and a warning is logged.
+        - An HTML comment is only recognized when '<!--' starts the line. A comment that
+          opens mid-line ('text <!--') does not hide the '#' lines inside it.
         - Without `max_siblings`, a section lists every other header at its level under
           the same parent. With n such headers, the sibling lists hold n * (n - 1) names,
           which gets slow for thousands of headers at one level.
@@ -123,22 +132,27 @@ class MarkdownSplitter(BaseSplitter):
     def _front_matter_line_count(lines: List[str]) -> int:
         """Count the lines of YAML front matter at the start of the document.
 
-        Front matter starts with a '---' line and ends with a '---' or '...' line. Without
-        a closing line, the opening '---' is a thematic break and 0 is returned.
+        Front matter starts with a '---' line and ends with a '---' or '...' line, and
+        every line between them looks like YAML. Otherwise the opening '---' is a
+        thematic break and 0 is returned.
         """
         if not lines or lines[0].rstrip("\r") != _FRONT_MATTER_DELIMITERS[0]:
             return 0
 
         for index, line in enumerate(lines[1:], start=1):
-            if line.rstrip("\r") in _FRONT_MATTER_DELIMITERS:
+            line = line.rstrip("\r")
+            if line in _FRONT_MATTER_DELIMITERS:
                 return index + 1
+            if not _FRONT_MATTER_LINE_PATTERN.match(line):
+                return 0
 
         return 0
 
     def _find_headers(self, text: str) -> List[tuple[int, int, int, str]]:
         """Find the headers outside fenced code blocks, HTML comments and front matter.
 
-        An unclosed fence or HTML comment runs to the end of the document.
+        An unclosed fence or HTML comment runs to the end of the document, and a warning
+        is logged because the headers after it are treated as text.
 
         Returns:
             List[tuple[int, int, int, str]]: For each header, the offset where its line
@@ -147,6 +161,8 @@ class MarkdownSplitter(BaseSplitter):
         headers = []
         fence = None
         in_html_comment = False
+        # 1-based line number where the open fence or HTML comment started
+        block_start_line = 0
         position = 0
         lines = text.split("\n")
         front_matter_line_count = self._front_matter_line_count(lines)
@@ -170,16 +186,25 @@ class MarkdownSplitter(BaseSplitter):
 
             if _HTML_COMMENT_OPEN_PATTERN.match(line):
                 in_html_comment = "-->" not in line[line.index("<!--") + 4 :]
+                block_start_line = index + 1
                 continue
 
             if fence_match := _FENCE_OPEN_PATTERN.match(line):
                 fence = fence_match.group(1)
+                block_start_line = index + 1
                 continue
 
             header_match = _HEADER_PATTERN.match(line)
             if header_match and len(header_match.group(1)) <= self.max_level:
                 level = len(header_match.group(1))
                 headers.append((line_start, position, level, header_match.group(2)))
+
+        if fence or in_html_comment:
+            block = "code fence" if fence else "HTML comment"
+            logger.warning(
+                f"The {block} that starts on line {block_start_line} is never closed. "
+                "Headers after it are treated as text."
+            )
 
         return headers
 
@@ -270,6 +295,7 @@ class MarkdownSplitter(BaseSplitter):
                 },
             ]
         """
+        text = text.removeprefix(_BYTE_ORDER_MARK)
         if not text.strip():
             logger.warning("`get_document_outline` received empty text input.")
             return []
@@ -397,6 +423,7 @@ class MarkdownSplitter(BaseSplitter):
             >>> sections[1].metadata.siblings
             ['Sub Topic B']
         """
+        text = text.removeprefix(_BYTE_ORDER_MARK)
         if not text.strip():
             logger.warning("`split_text` received empty text input.")
             return []
@@ -411,11 +438,15 @@ class MarkdownSplitter(BaseSplitter):
     def from_file(
         cls,
         filepath: Union[str, Path],
-        encoding: str = "utf-8",
+        encoding: str = "utf-8-sig",
         max_level: int = MAX_HEADER_LEVEL,
         max_siblings: int | None = None,
     ) -> List[Section]:
-        """Create sections from a Markdown file."""
+        """Create sections from a Markdown file.
+
+        The default encoding, 'utf-8-sig', reads UTF-8 files with or without a byte order
+        mark.
+        """
         path = Path(filepath)
         if not path.exists():
             error_message = f"Unable to find the Markdown in the specified location: {path}"
