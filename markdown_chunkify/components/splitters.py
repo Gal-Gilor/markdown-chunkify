@@ -28,6 +28,8 @@ _FENCE_CLOSE_PATTERN = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*$")
 # that contains '-->'.
 _HTML_COMMENT_OPEN_PATTERN = re.compile(r"^ {0,3}<!--")
 _FRONT_MATTER_DELIMITERS = ("---", "...")
+# A YAML 'key:' entry. The first line of front matter must be one.
+_FRONT_MATTER_KEY_PATTERN = re.compile(r"^[\w\"'][^:]*:(?:[ \t]|$)")
 # A line that can appear in YAML front matter: a 'key:' entry, a '- ' list item, an
 # indented continuation, a YAML comment or a blank line.
 _FRONT_MATTER_LINE_PATTERN = re.compile(
@@ -132,11 +134,14 @@ class MarkdownSplitter(BaseSplitter):
     def _front_matter_line_count(lines: List[str]) -> int:
         """Count the lines of YAML front matter at the start of the document.
 
-        Front matter starts with a '---' line and ends with a '---' or '...' line, and
-        every line between them looks like YAML. Otherwise the opening '---' is a
-        thematic break and 0 is returned.
+        Front matter starts with a '---' line followed by a 'key:' line, ends with a '---'
+        or '...' line, and every line between them looks like YAML. Otherwise the
+        opening '---' is a thematic break and 0 is returned.
         """
-        if not lines or lines[0].rstrip("\r") != _FRONT_MATTER_DELIMITERS[0]:
+        if len(lines) < 2 or lines[0].rstrip("\r") != _FRONT_MATTER_DELIMITERS[0]:
+            return 0
+
+        if not _FRONT_MATTER_KEY_PATTERN.match(lines[1].rstrip("\r")):
             return 0
 
         for index, line in enumerate(lines[1:], start=1):

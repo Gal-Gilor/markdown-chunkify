@@ -369,14 +369,14 @@ def test_from_file_max_siblings(tmp_path):
 
 def test_byte_order_mark_in_text(splitter):
     """A UTF-8 byte order mark before the first header does not hide it."""
-    sections = splitter.split_text("﻿# Title\nText")
+    sections = splitter.split_text("\ufeff# Title\nText")
 
     assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
 
 
 def test_byte_order_mark_in_outline(splitter):
     """get_document_outline also ignores a byte order mark."""
-    outline = splitter.get_document_outline("﻿# Title\nText")
+    outline = splitter.get_document_outline("\ufeff# Title\nText")
 
     assert [(node["level"], node["header"]) for node in outline] == [(1, "Title")]
 
@@ -384,7 +384,7 @@ def test_byte_order_mark_in_outline(splitter):
 def test_byte_order_mark_in_file(tmp_path):
     """from_file reads a UTF-8 file with a byte order mark."""
     md_file = tmp_path / "bom.md"
-    md_file.write_bytes("﻿# Title\nText".encode("utf-8"))
+    md_file.write_bytes("\ufeff# Title\nText".encode("utf-8"))
 
     sections = MarkdownSplitter.from_file(md_file)
 
@@ -441,3 +441,18 @@ def test_mid_line_html_comment_is_not_recognized(splitter):
     sections = splitter.split_text("# A\ntext <!--\n# B\n-->")
 
     assert [s.section_header for s in sections] == ["A", "B"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["---\n# Title\n---\n## Next", "---\n# Title\nAuthor: Gal\n---\n## Next"],
+)
+def test_front_matter_must_start_with_a_key(splitter, text):
+    """A '---' block whose first line is not a 'key:' entry is not front matter."""
+    sections = splitter.split_text(text)
+
+    assert [(s.header_level, s.section_header) for s in sections] == [
+        (0, ""),
+        (1, "Title"),
+        (2, "Next"),
+    ]
