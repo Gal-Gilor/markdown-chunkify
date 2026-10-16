@@ -6,34 +6,55 @@ authors = [
     {name = "Gal Gilor", email = "gilorgal2010@gmail.com"}
 ]
 readme = "README.md"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
-dependencies = ["pydantic (>=2.10.6,<3.0.0)"]
+dependencies = [
+    "pydantic>=2.10.6,<3",
+]
 
 [project.optional-dependencies]
-pdf = ["pymupdf4llm (>=0.0.17,<0.0.18)"]
-normalize = ["google-genai (>=1.2.0,<2.0.0)", "jinja2 (>=3.1.5,<4.0.0)", "tenacity (>=9.0.0,<10.0.0)"]
+pdf = [
+    "pymupdf4llm>=0.0.17,<0.0.18",
+]
+normalize = [
+    "google-genai>=1.2.0,<2",
+    "jinja2>=3.1.5,<4",
+    "tenacity>=9.0.0,<10",
+]
 
 [project.urls]
 Github = "https://github.com/Gal-Gilor/markdown-chunkify"
 Issues = "https://github.com/Gal-Gilor/markdown-chunkify/issues"
 
-[tool.poetry]
-packages = [{include = "markdown_chunkify"}]
-
-[tool.poetry.group.dev.dependencies]
-pytest = "^7.0"
-pytest-cov = ">=6.0.0,<7.0.0"
-black = "^23.0"
-isort = ">=5.13.2,<6.0.0"
-ruff = ">=0.9.3,<0.10.0"
-ipykernel = ">=6.29.5,<7.0.0"
+[dependency-groups]
+dev = [
+    "pytest>=8.4,<9",
+    "pytest-cov>=6,<8",
+    "ruff>=0.14,<0.15",
+]
 
 [build-system]
-requires = ["poetry-core>=2.0.0,<3.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["uv_build>=0.11.32,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-root = ""
+
+[tool.ruff]
+line-length = 94
+fix = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
 
 [tool.ruff.format]
 quote-style = "double"
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

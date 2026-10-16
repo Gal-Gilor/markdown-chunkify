@@ -8,12 +8,13 @@ from tenacity import RetryCallState
 
 
 class RetryConfig(BaseModel):
-    """Configuration settings for retry behavior using tenacity's random exponential backoff strategy.
+    """Retry settings for tenacity's random exponential backoff strategy.
 
     Attributes:
         attempts (int): Maximum number of retry attempts before giving up. Default is 3.
         multiplier (float): Base multiplier for tenacity's wait_random_exponential strategy.
-            Wait time between retries will be random between [0, min(multiplier * 2^(attempt), max_wait)].
+            Wait time between retries will be random between
+            [0, min(multiplier * 2^(attempt), max_wait)].
             Default is 1.0.
         max_wait (float): Maximum wait time between retries (seconds). Default is 10.0.
     """
@@ -32,7 +33,8 @@ class RetryConfig(BaseModel):
         10.0,
         gt=0,
         description=(
-            "Maximum wait time in seconds between retries, regardless of the exponential backoff calculation."
+            "Maximum wait time in seconds between retries, regardless of the exponential "
+            "backoff calculation."
         ),
     )
     retry_error_callback: Callable[[RetryCallState], Any] | None = Field(
@@ -41,7 +43,7 @@ class RetryConfig(BaseModel):
     )
 
     class ConfigDict:
-        description = "Retry configuration settings using tenacity's random exponential backoff strategy."
+        description = "Retry settings for tenacity's random exponential backoff strategy."
 
         json_schema_extra = {
             "examples": [
