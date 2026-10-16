@@ -246,7 +246,7 @@ class MarkdownSplitter(BaseSplitter):
     def _create_sections_from_outline(
         self, outline: List[Dict], parent_headers: Optional[Dict[str, str]] = None
     ) -> List[Section]:
-        """Convert a document outline into a flat list of Section objects with hierarchy information.
+        """Convert a document outline into a flat list of Section objects.
 
         Traverses the hierarchical document outline in document order and creates Section
         objects that keep the parent-child relationships and sibling connections.

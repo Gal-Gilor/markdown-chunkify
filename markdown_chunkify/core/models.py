@@ -45,7 +45,9 @@ class Section(MarkdownContent):
     header_level: int = Field(
         ...,
         ge=0,
-        description="The level of the header (number of #). 0 for text before the first header.",
+        description=(
+            "The level of the header (number of #). 0 for text before the first header."
+        ),
     )
     metadata: SectionMetadata = Field(
         default_factory=SectionMetadata,

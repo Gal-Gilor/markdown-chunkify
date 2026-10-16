@@ -1,3 +1,5 @@
+[![Execute Tests](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/execute_main_tests.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/execute_main_tests.yaml)
+
 # MarkdownSplitter
 
 A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, and can optionally convert PDFs to Markdown and normalize Unicode characters with Gemini.
@@ -22,13 +24,17 @@ pip install "markdown-chunkify[pdf] @ git+https://github.com/Gal-Gilor/markdown-
 pip install "markdown-chunkify[normalize] @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
 ```
 
-For Development Setup:
+For Development Setup (requires [uv](https://docs.astral.sh/uv/)):
 ```bash
 git clone https://github.com/Gal-Gilor/markdown-chunkify.git
 cd markdown-chunkify
-poetry install --all-extras
-poetry run pytest tests -vv
+uv sync --all-extras
+uv run pytest -vv
+uv run ruff check .
+uv run ruff format .
 ```
+
+The [Execute Tests](.github/workflows/execute_main_tests.yaml) workflow runs Ruff, the tests on Python 3.12 and 3.13, and a wheel build on pushes and pull requests to `main`.
 
 ## Configuration
 

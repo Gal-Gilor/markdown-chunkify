@@ -80,7 +80,7 @@ class UnicodeReplaceProcessor(BaseProcessor):
 
     @property
     def _retry_settings(self):
-        """A property to configure the retry mechanism, returning a tenacity retry decorator."""
+        """Configure the retry mechanism, returning a tenacity retry decorator."""
         return retry(
             stop=stop_after_attempt(self.retry_config.attempts),
             wait=wait_random_exponential(
@@ -99,7 +99,8 @@ class UnicodeReplaceProcessor(BaseProcessor):
             Section: A new section with normalized Unicode characters.
         """
         logger.debug(
-            f"Replacing Unicode characters with their ASCII equivalents in section: {section.section_header}"
+            "Replacing Unicode characters with their ASCII equivalents in section: "
+            f"{section.section_header}"
         )
         return self._retry_settings(self._normalize_unicode)(section)
 
@@ -156,7 +157,8 @@ class UnicodeReplaceProcessor(BaseProcessor):
             token_count = response_usage.get("candidates_token_count", 0)
 
             logger.info(
-                f"Successfully replaced the Unicode characters in section: {original_section.section_header}"
+                "Successfully replaced the Unicode characters in section: "
+                f"{original_section.section_header}"
             )
 
             return Section(
@@ -177,7 +179,8 @@ class UnicodeReplaceProcessor(BaseProcessor):
 
         except Exception as e:
             logger.warning(
-                f"Skipped {original_section.section_header}. Failed to replace Unicode characters. Error: {str(e)}",
+                f"Skipped {original_section.section_header}. Failed to replace Unicode "
+                f"characters. Error: {str(e)}",
                 exc_info=True,
             )
             original_section.metadata.error = str(e)

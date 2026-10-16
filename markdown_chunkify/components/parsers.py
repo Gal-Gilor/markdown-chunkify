@@ -40,7 +40,8 @@ class PyMuPDFMParser(BaseParser):
             start_time = time.time()
             markdown = pymupdf4llm.to_markdown(file_path, **kwargs)
             logger.info(
-                f"{file_name} was successfully converted to Markdown in {time.time() - start_time:.2f} seconds."
+                f"{file_name} was successfully converted to Markdown in "
+                f"{time.time() - start_time:.2f} seconds."
             )
 
             if destination_path:
@@ -56,12 +57,14 @@ class PyMuPDFMParser(BaseParser):
                         f.write(markdown)
 
                     logger.info(
-                        f"{file_name} was successfully saved to: {markdown_output_path} as Markdown."
+                        f"{file_name} was successfully saved to: "
+                        f"{markdown_output_path} as Markdown."
                     )
 
                 except Exception as e:
                     logger.error(
-                        f"Failed to save the Markdown to: {destination_path}. Error: {str(e)}",
+                        f"Failed to save the Markdown to: {destination_path}. "
+                        f"Error: {str(e)}",
                         exc_info=True,
                     )
                     raise

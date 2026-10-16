@@ -1,0 +1,75 @@
+name: Execute Tests
+description: Lint, test and build the package on pushes and pull requests to the main branch
+
+on:
+  push:
+    branches: ["main"]
+
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Ruff lint
+        run: uv run ruff check --no-fix .
+
+      - name: Ruff format
+        run: uv run ruff format --check .
+
+  pytest:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv with Python ${{ matrix.python-version }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Run Pytests
+        run: uv run pytest -vv --cov=markdown_chunkify --cov-report=term-missing
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Build the sdist and wheel
+        run: uv build
+
+      - name: Import the wheel without extras
+        run: |
+          uv venv /tmp/wheel-check
+          uv pip install --python /tmp/wheel-check/bin/python dist/*.whl
+          /tmp/wheel-check/bin/python -c "from markdown_chunkify import MarkdownSplitter"
