@@ -20,8 +20,9 @@ class PyMuPDFMParser(BaseParser):
 
         Args:
             file_path (str): Path to the PDF file.
-            destination_path (str | None): Path to save the markdown file.
-                If a path is provided, the markdown file will be saved to that location.
+            destination_path (str | None): A directory to save the Markdown file in.
+                If provided, the Markdown is saved as `<PDF file name>.md` in that
+                directory (for example, `docs/report.pdf` is saved as `report.md`).
                 If the directory does not exist, it will be created.
 
         Returns:
@@ -51,7 +52,7 @@ class PyMuPDFMParser(BaseParser):
 
                 try:
                     destination_path.mkdir(parents=True, exist_ok=True)
-                    markdown_output_path = destination_path / f"{file_name}.md"
+                    markdown_output_path = destination_path / f"{file_name.stem}.md"
 
                     with open(markdown_output_path, "w", encoding="utf-8") as f:
                         f.write(markdown)
