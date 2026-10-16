@@ -1,5 +1,7 @@
 name: Execute Tests
-description: Lint, test and build the package on pushes and pull requests to the main branch
+
+# Lint, test and build the package on pushes and pull requests to the main branch.
+# Only GitHub-owned actions are used; uv is installed with pip.
 
 on:
   push:
@@ -16,11 +18,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          enable-cache: true
+
+      - name: Install uv
+        run: python -m pip install "uv>=0.11,<0.12"
 
       - name: Install dependencies
         run: uv sync --locked
@@ -41,14 +45,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up uv with Python ${{ matrix.python-version }}
-        uses: astral-sh/setup-uv@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          enable-cache: true
+
+      - name: Install uv
+        run: python -m pip install "uv>=0.11,<0.12"
 
       - name: Install dependencies
-        run: uv sync --locked --all-extras
+        run: uv sync --locked --all-extras --python ${{ matrix.python-version }}
 
       - name: Run Pytests
         run: uv run pytest -vv --cov=markdown_chunkify --cov-report=term-missing
@@ -60,10 +66,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Install uv
+        run: python -m pip install "uv>=0.11,<0.12"
 
       - name: Build the sdist and wheel
         run: uv build
