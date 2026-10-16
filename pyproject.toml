@@ -1,18 +1,24 @@
 [project]
 name = "markdown-chunkify"
-version = "0.1"
-description = "A Python package containing utilities for processing Markdowns."
+version = "0.2.0"
+description = "Split Markdown documents into hierarchical sections."
 authors = [
     {name = "Gal Gilor", email = "gilorgal2010@gmail.com"}
 ]
-packages = [{include = "markdown_chunkify"}]
 readme = "README.md"
-requires-python = ">=3.12,<3.13"
-dependencies = ["pymupdf4llm (>=0.0.17,<0.0.18)", "pydantic (>=2.10.6,<3.0.0)", "jinja2 (>=3.1.5,<4.0.0)", "google-cloud-aiplatform (>=1.80.0,<2.0.0)", "tenacity (>=9.0.0,<10.0.0)", "google-genai (>=1.2.0,<2.0.0)"]
+requires-python = ">=3.12"
+dependencies = ["pydantic (>=2.10.6,<3.0.0)"]
+
+[project.optional-dependencies]
+pdf = ["pymupdf4llm (>=0.0.17,<0.0.18)"]
+normalize = ["google-genai (>=1.2.0,<2.0.0)", "jinja2 (>=3.1.5,<4.0.0)", "tenacity (>=9.0.0,<10.0.0)"]
 
 [project.urls]
 Github = "https://github.com/Gal-Gilor/markdown-chunkify"
 Issues = "https://github.com/Gal-Gilor/markdown-chunkify/issues"
+
+[tool.poetry]
+packages = [{include = "markdown_chunkify"}]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.0"
@@ -23,8 +29,8 @@ ruff = ">=0.9.3,<0.10.0"
 ipykernel = ">=6.29.5,<7.0.0"
 
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
 
 [tool.ruff.lint.isort]
 force-single-line = true

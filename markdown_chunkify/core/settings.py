@@ -58,19 +58,5 @@ class RetryConfig(BaseModel):
 DEFAULT_RETRY_CONFIG = RetryConfig()
 
 
-def initialize_logger() -> logging.Logger:
-    """Initialize a custom formatted logger."""
-
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s.%(msecs)02d - %(levelname)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
-
-    logger = logging.getLogger("markdown_chunkify")
-    logger.addHandler(logging.NullHandler())
-
-    return logger
-
-
-logger = initialize_logger()
+logger = logging.getLogger("markdown_chunkify")
+logger.addHandler(logging.NullHandler())

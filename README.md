@@ -1,24 +1,32 @@
 # MarkdownSplitter
 
-A Python library that splits Markdown into hierarchical sections. It intelligently handles code blocks, normalizes Unicode characters, and maintains parent-child relationships between sections.
+A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, and can optionally convert PDFs to Markdown and normalize Unicode characters with Gemini.
 
 ## Features
 
-- **Code-Aware**: Preserves code blocks and comments while processing markdown
-- **Hierarchy Tracking**: Automatically tracks parent headers for each section (H1-H4)
-- **Unicode Normalization**: Converts non-ASCII characters to their ASCII equivalents
+- Lines inside fenced code blocks (```` ``` ```` or `~~~`) are never treated as headers, and section text keeps code blocks exactly as written
+- Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
+- Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections
+- Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
+- Optional extras: PDF to Markdown conversion (`pdf`) and Gemini-powered Unicode normalization (`normalize`)
 
 ## Installation
 
 ```bash
-pip install -e .
+pip install "markdown-chunkify @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
+```
+
+The splitter only depends on Pydantic. Install the extras for the PDF parser or the Unicode normalizer:
+```bash
+pip install "markdown-chunkify[pdf] @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
+pip install "markdown-chunkify[normalize] @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
 ```
 
 For Development Setup:
 ```bash
 git clone https://github.com/Gal-Gilor/markdown-chunkify.git
 cd markdown-chunkify
-poetry install
+poetry install --all-extras
 poetry run pytest tests -vv
 ```
 
@@ -26,35 +34,37 @@ poetry run pytest tests -vv
 
 ### Environment Variables
 
-The following environment variables are required for the `UnicodeReplaceProcessor` component.
+The following environment variables are used by the `UnicodeReplaceProcessor` component (`normalize` extra).
 
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `GOOGLE_API_KEY` | A Gemini API key | `None` |
-| `GEMINI_MODEL_NAME` | A Gemini model name | `gemini-2.0-flash` | 
+| `GOOGLE_GEMINI_MODEL` | A Gemini model name | `gemini-2.0-flash` | 
 
 
 ## Usage
 
 ```python
 from markdown_chunkify import MarkdownSplitter
-from markdown_chunkify import PyMuPDFMParser
-
-
-# Convert PDF to Markdown
-markdown_text = PyMuPDFMParser.to_markdown(
-    file_path="document.pdf",
-    destination_path="document.md"  # Optional
-)
 
 # Initialize splitter
 splitter = MarkdownSplitter()
 
-# Split from file
-sections = splitter.from_file('document.md')
-
 # Split from text
 sections = splitter.split_text(markdown_text)
+
+# Split from file
+sections = MarkdownSplitter.from_file("document.md")
+
+# Nested outline instead of a flat list
+outline = splitter.get_document_outline(markdown_text)
+```
+
+Convert a PDF to Markdown (`pdf` extra):
+```python
+from markdown_chunkify import PyMuPDFMParser
+
+markdown_text = PyMuPDFMParser.to_markdown(file_path="document.pdf")
 ```
 
 ## Data Models
@@ -69,7 +79,7 @@ class MarkdownContent(BaseModel):
 **Section:** The primary data structure representing a Markdown section. It contains the header level, metadata, and content of a section.
 ```python
 class Section(MarkdownContent):
-    header_level: int                           # Number of # symbols (1-4)
+    header_level: int                           # Number of # symbols (1-6), 0 for text before the first header
     metadata: SectionMetadata                   # Processing and hierarchy information
 
     def to_markdown(self) -> str:               # Convert section back to Markdown
@@ -84,6 +94,7 @@ class SectionMetadata(BaseModel):
     error: str | None                           # Error message if normalization failed
     original_content: MarkdownContent | None    # Pre-normalization content
     parents: dict[str, str | None]              # Header hierarchy information
+    siblings: list[str]                         # Headers at the same level with the same parent
 ```
 
 ### Methods

@@ -7,7 +7,6 @@ from jinja2 import Template
 from tenacity import retry
 from tenacity import stop_after_attempt
 from tenacity import wait_random_exponential
-from vertexai.generative_models import GenerationResponse
 
 from markdown_chunkify.core.interfaces import BaseProcessor
 from markdown_chunkify.core.models import MarkdownContent
@@ -139,12 +138,12 @@ class UnicodeReplaceProcessor(BaseProcessor):
             return section
 
     def _create_normalized_section(
-        self, generation_response: GenerationResponse, original_section: Section
+        self, generation_response: types.GenerateContentResponse, original_section: Section
     ) -> Section:
         """Create a normalized section from API response.
 
         Args:
-            generation_response (GenerationResponse): A GenerationResponse instance
+            generation_response (types.GenerateContentResponse): A Gemini API response
             original_section (Section): The original section to be normalized
 
         Returns:
