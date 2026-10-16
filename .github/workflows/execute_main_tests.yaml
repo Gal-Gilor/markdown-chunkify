@@ -73,3 +73,11 @@ jobs:
           uv venv /tmp/wheel-check
           uv pip install --python /tmp/wheel-check/bin/python dist/*.whl
           /tmp/wheel-check/bin/python -c "from markdown_chunkify import MarkdownSplitter"
+
+      # Importing the processor reads the bundled prompt template, so this fails if the
+      # template is missing from the wheel.
+      - name: Import the normalizer with the normalize extra
+        run: |
+          uv venv /tmp/normalize-check
+          uv pip install --python /tmp/normalize-check/bin/python "$(ls dist/*.whl)[normalize]"
+          /tmp/normalize-check/bin/python -c "from markdown_chunkify import UnicodeReplaceProcessor"
