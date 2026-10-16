@@ -1,4 +1,4 @@
-import os
+import logging
 import re
 from pathlib import Path
 from typing import Dict
@@ -9,25 +9,37 @@ from typing import Union
 from markdown_chunkify.core.interfaces import BaseSplitter
 from markdown_chunkify.core.models import Section
 from markdown_chunkify.core.models import SectionMetadata
-from markdown_chunkify.core.settings import logger
+
+logger = logging.getLogger(__name__)
+
+MAX_HEADER_LEVEL = 6
+
+# ATX header: up to 3 spaces of indent, 1-6 '#', whitespace, the header text and an
+# optional closing sequence of '#'.
+_HEADER_PATTERN = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
+# Opening code fence: 3+ backticks or tildes. A backtick fence's info string
+# cannot contain backticks.
+_FENCE_OPEN_PATTERN = re.compile(r"^ {0,3}(`{3,}(?!.*`)|~{3,})")
+_FENCE_CLOSE_PATTERN = re.compile(r"^ {0,3}(`{3,}|~{3,})[ \t]*$")
+_LEADING_BLANK_LINES_PATTERN = re.compile(r"^\s*\n")
 
 
 class MarkdownSplitter(BaseSplitter):
     """Split Markdown documents into sections based on header hierarchy.
 
     Processes Markdown documents and splits them into sections based on
-    header levels (# through #####). It maintains the hierarchical relationships between
-    sections and tracks sibling headers at the same level. Valid Markdown headers should
-    start with '#' followed by a space (e.g., "# Header 1", "## Header 2").
-    The expresssion used to match headers is: `^(#+)\s+(.+)$`. If the header pattern in
-    your text is different, you may need to adjust the `_header_pattern` attribute.
+    header levels (# through ######). It maintains the hierarchical relationships between
+    sections and tracks sibling headers at the same level. Valid Markdown headers start
+    with 1-6 '#' followed by a space (e.g., "# Header 1", "## Header 2").
 
     Key Features:
         - Splits Markdown text into sections based on headers
         - Maintains parent-child relationships between headers
         - Tracks sibling headers at the same level
-        - Handles code blocks correctly (ignores # in code)
-        - Supports headers up to level 5 (##### H5)
+        - Ignores lines inside fenced code blocks (``` or ~~~), so comments are not headers
+        - Keeps section text exactly as written, including code blocks
+        - Returns text before the first header as a level-0 section with an empty header
+        - Supports headers up to level 6, or a lower limit set with `max_level`
 
     Example:
         >>> splitter = MarkdownSplitter()
@@ -36,7 +48,7 @@ class MarkdownSplitter(BaseSplitter):
         ... Markdown Splitting Made Easy.
         ... ## Installation
         ... To install the package, run the following command:
-        ... ```python
+        ... ```bash
         ... # Install from source. Comment will not be treated as a header.
         ... pip install -e .
         ... ```
@@ -63,54 +75,95 @@ class MarkdownSplitter(BaseSplitter):
         Siblings: ['Installation']
     """
 
-    def __init__(self):
-        self._header_pattern = re.compile(r"^(#+)\s+(.+)$", re.MULTILINE)
+    def __init__(self, max_level: int = MAX_HEADER_LEVEL):
+        """Initialize the splitter.
 
-    def _process_code_blocks(self, text: str) -> tuple[str, dict[str, str]]:
-        """Process code blocks to protect comments from being treated as headers."""
-        replacement_map = {}
-        counter = 0
+        Args:
+            max_level (int): The deepest header level to split on (1-6). Deeper headers
+                are kept as text of the enclosing section.
+        """
+        if not 1 <= max_level <= MAX_HEADER_LEVEL:
+            raise ValueError(f"max_level must be between 1 and {MAX_HEADER_LEVEL}.")
+        self.max_level = max_level
 
-        def replace_comments(match):
-            nonlocal counter
-            code_block = match.group(1)
-            lines = code_block.split("\n")
-            processed_lines = []
-
-            for line in lines:
-                if line.lstrip().startswith("#"):
-                    token = f"{{{{CODE_COMMENT_{counter}}}}}"
-                    replacement_map[token] = line
-                    counter += 1
-                    processed_lines.append(token)
-                else:
-                    processed_lines.append(line)
-
-            return f"```{os.linesep.join(processed_lines)}```"
-
-        processed_text = re.sub(
-            r"```(?:.*?)\n(.*?)```", replace_comments, text, flags=re.DOTALL
+    @staticmethod
+    def _closes_fence(line: str, fence: str) -> bool:
+        """Check if a line closes a code fence opened with `fence`."""
+        match = _FENCE_CLOSE_PATTERN.match(line)
+        return bool(
+            match and match.group(1)[0] == fence[0] and len(match.group(1)) >= len(fence)
         )
-        return processed_text, replacement_map
 
-    @classmethod
-    def get_document_outline(cls, text: str) -> Dict:
+    def _find_headers(self, text: str) -> List[tuple[int, int, int, str]]:
+        """Find the headers outside fenced code blocks.
+
+        An unclosed fence runs to the end of the document.
+
+        Returns:
+            List[tuple[int, int, int, str]]: For each header, the offset where its line
+                starts, the offset where its line ends, its level and its text.
+        """
+        headers = []
+        fence = None
+        position = 0
+
+        for line in text.split("\n"):
+            line_start = position
+            position += len(line) + 1
+            line = line.rstrip("\r")
+
+            if fence:
+                if self._closes_fence(line, fence):
+                    fence = None
+                continue
+
+            if fence_match := _FENCE_OPEN_PATTERN.match(line):
+                fence = fence_match.group(1)
+                continue
+
+            header_match = _HEADER_PATTERN.match(line)
+            if header_match and len(header_match.group(1)) <= self.max_level:
+                level = len(header_match.group(1))
+                headers.append((line_start, position, level, header_match.group(2)))
+
+        return headers
+
+    @staticmethod
+    def _trim(text: str) -> str:
+        """Remove leading blank lines and trailing whitespace, keeping indentation."""
+        return _LEADING_BLANK_LINES_PATTERN.sub("", text).rstrip()
+
+    @staticmethod
+    def _set_siblings(nodes: List[Dict]) -> None:
+        """Set each node's siblings: other nodes at the same level under the same parent."""
+        for index, node in enumerate(nodes):
+            node["siblings"] = [
+                other["header"]
+                for other_index, other in enumerate(nodes)
+                if other_index != index and other["level"] == node["level"]
+            ]
+            MarkdownSplitter._set_siblings(node["children"])
+
+    def get_document_outline(self, text: str) -> List[Dict]:
         """Generate a nested document outline with header hierarchy and sibling relationships.
 
         Processes a Markdown document and creates a hierarchical structure that
         captures the relationships between headers, their content, and sibling headers at
-        the same level.
+        the same level. Headers with the same text are kept as separate nodes.
 
         Args:
             text (str): The Markdown text to process. Should contain headers marked with '#'
                        (e.g., "# Header 1", "## Header 2", etc.).
 
         Returns:
-            Dict: A nested dictionary representing the document structure where each node contains:
-                - content (str): The text content under the header
+            List[Dict]: The top-level nodes in document order. Each node contains:
+                - header (str): The header text
+                - content (str): The text under the header, up to the next header
                 - level (int): The header level (1 for H1, 2 for H2, etc.)
-                - children (Dict): Nested headers under this header
+                - children (List[Dict]): Nested headers under this header
                 - siblings (List[str]): Headers at the same level with the same parent
+                Text before the first header is the first node, with level 0 and an
+                empty header.
 
         Example:
             >>> text = '''
@@ -118,137 +171,91 @@ class MarkdownSplitter(BaseSplitter):
             ... Content 1
             ... ## SubHeader A
             ... Content A
-            ... ## SubHeader B
-            ... Content B
             ... # Header 2
             ... Content 2
             ... '''
-            >>> outline = MarkdownSplitter.get_document_outline(text)
-            >>> outline
-            {
-                "Header 1": {
+            >>> MarkdownSplitter().get_document_outline(text)
+            [
+                {
+                    "header": "Header 1",
                     "content": "Content 1",
                     "level": 1,
-                    "children": {
-                        "SubHeader A": {
+                    "children": [
+                        {
+                            "header": "SubHeader A",
                             "content": "Content A",
                             "level": 2,
-                            "children": {},
-                            "siblings": ["SubHeader B"]
-                        },
-                        "SubHeader B": {
-                            "content": "Content B",
-                            "level": 2,
-                            "children": {},
-                            "siblings": ["SubHeader A"]
+                            "children": [],
+                            "siblings": [],
                         }
-                    },
-                    "siblings": ["Header 2"]
+                    ],
+                    "siblings": ["Header 2"],
                 },
-                "Header 2": {
+                {
+                    "header": "Header 2",
                     "content": "Content 2",
                     "level": 1,
-                    "children": {},
-                    "siblings": ["Header 1"]
-                }
-            }
+                    "children": [],
+                    "siblings": ["Header 1"],
+                },
+            ]
         """
         if not text.strip():
             logger.warning("`get_document_outline` received empty text input.")
-            return {}
+            return []
 
-        splitter = cls()
-        processed_text, _ = splitter._process_code_blocks(text)
-        headers = list(splitter._header_pattern.finditer(processed_text))
+        headers = self._find_headers(text)
+        document_outline = []
 
-        if not headers:
-            return {}
+        preamble = self._trim(text[: headers[0][0] if headers else len(text)])
+        if preamble:
+            document_outline.append(
+                {
+                    "header": "",
+                    "content": preamble,
+                    "level": 0,
+                    "children": [],
+                    "siblings": [],
+                }
+            )
 
-        # Initialize outline
-        document_outline = {}
-        header_stack = []
-        current_path_stack = []
+        # Nodes on the path from the top level to the current header
+        node_stack = []
 
-        # First pass: Build basic structure and collect siblings
-        sibling_groups = {}  # Will store headers at same level with same immediate parent
-
-        for i, match in enumerate(headers):
-            header_marks, header_text = match.group(1), match.group(2).strip()
-            current_level = len(header_marks)
-
-            # Extract content
-            start_pos = match.end()
-            end_pos = headers[i + 1].start() if i + 1 < len(headers) else len(processed_text)
-            content = processed_text[start_pos:end_pos].strip()
-
-            # Create node
-            current_node = {
-                "content": content,
-                "level": current_level,
-                "children": {},
-                "siblings": [],  # Will be populated later
+        for i, (_, content_start, level, header_text) in enumerate(headers):
+            content_end = headers[i + 1][0] if i + 1 < len(headers) else len(text)
+            node = {
+                "header": header_text,
+                "content": self._trim(text[content_start:content_end]),
+                "level": level,
+                "children": [],
+                "siblings": [],
             }
 
-            # Update stacks based on current level
-            while header_stack and header_stack[-1][0] >= current_level:
-                header_stack.pop()
-                if current_path_stack:
-                    current_path_stack.pop()
+            while node_stack and node_stack[-1]["level"] >= level:
+                node_stack.pop()
 
-            # Get immediate parent for sibling grouping
-            immediate_parent = header_stack[-1][1] if header_stack else "root"
-            sibling_group_key = (immediate_parent, current_level)
+            parent_children = node_stack[-1]["children"] if node_stack else document_outline
+            parent_children.append(node)
+            node_stack.append(node)
 
-            # Track siblings
-            if sibling_group_key not in sibling_groups:
-                sibling_groups[sibling_group_key] = []
-            sibling_groups[sibling_group_key].append(header_text)
-
-            # Add node to document structure
-            if not header_stack:  # Top level
-                document_outline[header_text] = current_node
-                current_path_stack = [header_text]
-            else:
-                current_parent = document_outline
-                for path_element in current_path_stack:
-                    current_parent = current_parent[path_element]["children"]
-                current_parent[header_text] = current_node
-                current_path_stack.append(header_text)
-
-            header_stack.append((current_level, header_text))
-
-        # Second pass: Add sibling information
-        def add_siblings(outline: Dict, parent: str = "root", level: int = 1):
-            for header, node in outline.items():
-                sibling_group_key = (parent, node["level"])
-                if sibling_group_key in sibling_groups:
-                    node["siblings"] = [
-                        h for h in sibling_groups[sibling_group_key] if h != header
-                    ]
-                add_siblings(node["children"], header, node["level"] + 1)
-
-        add_siblings(document_outline)
+        self._set_siblings(document_outline)
 
         return document_outline
 
     def _create_sections_from_outline(
-        self, outline: Dict, parent_headers: Dict[str, Optional[str]] = None
+        self, outline: List[Dict], parent_headers: Optional[Dict[str, str]] = None
     ) -> List[Section]:
         """Convert a document outline into a flat list of Section objects with hierarchy information.
 
-        Traverses the hierarchical document outline and creates Section objects and maintain
-        the parent-child relationships and sibling connections. Recursively processes the outline
-        to handle nested headers of any depth
+        Traverses the hierarchical document outline in document order and creates Section
+        objects that keep the parent-child relationships and sibling connections.
 
         Args:
-            outline (Dict): A nested dictionary representing the document structure. Each node should contain:
-                - content (str): The text content under the header
-                - level (int): The header level (1 for H1, 2 for H2, etc.)
-                - children (Dict): Nested headers under this header
-                - siblings (List[str]): Headers at the same level with the same parent
-            parent_headers (Dict[str, Optional[str]], optional): A dictionary mapping header levels
-                to their parent header text. Keys are in the format 'h1', 'h2', etc. Defaults to None,
-                which initializes an empty parent hierarchy.
+            outline (List[Dict]): Nodes as returned by `get_document_outline`.
+            parent_headers (Dict[str, str], optional): A dictionary mapping the levels of the
+                ancestor headers to their text. Keys are in the format 'h1', 'h2', etc.
+                Defaults to None, which means the nodes have no ancestors.
 
         Returns:
             List[Section]: A flat list of Section objects, each containing:
@@ -257,37 +264,25 @@ class MarkdownSplitter(BaseSplitter):
                 - header_level (int): The level of the header
                 - metadata (SectionMetadata): Contains parent headers and sibling information
         """
-        if parent_headers is None:
-            parent_headers = {f"h{i}": None for i in range(1, 5)}
-
+        parent_headers = parent_headers or {}
         sections = []
 
-        for header, node in outline.items():
-            level = node["level"]
-            content = node["content"]
-
-            # Create metadata with parents and siblings
-            metadata = SectionMetadata(
-                parents={k: v for k, v in parent_headers.items() if v is not None},
-                siblings=node["siblings"],
+        for node in outline:
+            sections.append(
+                Section(
+                    section_header=node["header"],
+                    section_text=node["content"],
+                    header_level=node["level"],
+                    metadata=SectionMetadata(
+                        parents=dict(parent_headers), siblings=node["siblings"]
+                    ),
+                )
             )
 
-            # Create section
-            section = Section(
-                section_header=header,
-                section_text=content,
-                header_level=level,
-                metadata=metadata,
+            child_parents = {**parent_headers, f"h{node['level']}": node["header"]}
+            sections.extend(
+                self._create_sections_from_outline(node["children"], child_parents)
             )
-            sections.append(section)
-
-            # Update parent headers for children
-            new_parents = parent_headers.copy()
-            new_parents[f"h{level}"] = header
-
-            # Process children
-            child_sections = self._create_sections_from_outline(node["children"], new_parents)
-            sections.extend(child_sections)
 
         return sections
 
@@ -296,22 +291,24 @@ class MarkdownSplitter(BaseSplitter):
 
         Processes a Markdown document and splits it into sections based on
         headers. It maintains the hierarchical relationships between sections and tracks
-        sibling headers at the same level. The parent headers are tracked up to level 5 (h1-h5).
-        And, sibling relationships are based on headers at the same level with the same immediate parent.
-        Comments in code blocks (```) are not treated as headers.
+        sibling headers at the same level. Sibling relationships are based on headers at
+        the same level with the same parent. Lines inside fenced code blocks are not
+        treated as headers.
 
         Args:
             text (str): The Markdown text to split. Should contain headers marked with '#'
                        followed by a space (e.g., "# Header 1", "## Header 2").
 
         Returns:
-            List[Section]: A list of Section objects, each containing:
+            List[Section]: A list of Section objects in document order, each containing:
                 - section_header (str): The header text without '#' markers
                 - section_text (str): The content between this header and the next
                 - header_level (int): The level of the header (1 for H1, 2 for H2, etc.)
                 - metadata (SectionMetadata): Contains:
                     - parents (Dict[str, str]): Parent headers by level
                     - siblings (List[str]): Other headers at same level with same parent
+                Text before the first header, or a document without headers, is returned
+                as a section with level 0 and an empty header.
 
         Example:
             >>> text = '''
@@ -334,17 +331,19 @@ class MarkdownSplitter(BaseSplitter):
             logger.warning("`split_text` received empty text input.")
             return []
 
-        # Get document outline
         outline = self.get_document_outline(text)
-
-        # Create sections from outline
         sections = self._create_sections_from_outline(outline)
 
         logger.info(f"Successfully split the Markdown into {len(sections)} sections.")
         return sections
 
     @classmethod
-    def from_file(cls, filepath: Union[str, Path], encoding: str = "utf-8") -> List[Section]:
+    def from_file(
+        cls,
+        filepath: Union[str, Path],
+        encoding: str = "utf-8",
+        max_level: int = MAX_HEADER_LEVEL,
+    ) -> List[Section]:
         """Create sections from a Markdown file."""
         path = Path(filepath)
         if not path.exists():
@@ -358,7 +357,7 @@ class MarkdownSplitter(BaseSplitter):
             raise IsADirectoryError(error_message)
 
         try:
-            splitter = cls()
+            splitter = cls(max_level=max_level)
             with path.open("r", encoding=encoding) as f:
                 return splitter.split_text(f.read())
         except Exception as e:
