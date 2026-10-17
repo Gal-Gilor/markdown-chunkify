@@ -1,6 +1,8 @@
 import importlib
 
 from markdown_chunkify.components.splitters import MarkdownSplitter
+from markdown_chunkify.core.models import Section
+from markdown_chunkify.core.models import SectionMetadata
 
 # Components that need an optional extra are imported on first access.
 _OPTIONAL_COMPONENTS = {
@@ -25,4 +27,10 @@ def __getattr__(name: str):
     return getattr(module, name)
 
 
-__all__ = ["MarkdownSplitter", "PyMuPDFMParser", "UnicodeReplaceProcessor"]
+__all__ = [
+    "MarkdownSplitter",
+    "PyMuPDFMParser",
+    "Section",
+    "SectionMetadata",
+    "UnicodeReplaceProcessor",
+]

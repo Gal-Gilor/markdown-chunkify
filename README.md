@@ -105,6 +105,12 @@ A normalized section has `metadata.normalized` set to `True` and keeps the origi
 
 ## Data Models
 
+`Section` and `SectionMetadata` are exported from the package root:
+```python
+from markdown_chunkify import Section
+from markdown_chunkify import SectionMetadata
+```
+
 **MarkdownContent:** The base data structure representing a Markdown section. It contains the header and content of a section. It's used as a base class for the `Section` model, and as a generation schema for structured output responses
 ```python
 class MarkdownContent(BaseModel):
