@@ -2,7 +2,7 @@
 
 # MarkdownSplitter
 
-A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, and can optionally convert PDFs to Markdown and normalize Unicode characters with Gemini.
+A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, transliterates Unicode to ASCII, and can optionally convert PDFs to Markdown.
 
 ## Features
 
@@ -11,7 +11,8 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections. `MarkdownSplitter(max_siblings=10)` lists only the 10 nearest siblings
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written, and `metadata.char_count` is its length
-- Optional extras: PDF to Markdown conversion (`pdf`) and Gemini-powered Unicode normalization (`normalize`)
+- Transliterates headers and text to ASCII by default (`Café` becomes `Cafe`), with `normalize_unicode=False` to keep the source text
+- Optional extra: PDF to Markdown conversion (`pdf`)
 
 ## Installation
 
@@ -19,11 +20,12 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 pip install "markdown-chunkify @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
 ```
 
-The splitter only depends on Pydantic. Install the extras for the PDF parser or the Unicode normalizer:
+The splitter depends on Pydantic and [anyascii](https://github.com/anyascii/anyascii). Install the `pdf` extra for the PDF parser:
 ```bash
 pip install "markdown-chunkify[pdf] @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
-pip install "markdown-chunkify[normalize] @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
 ```
+
+The `pdf` extra installs [PyMuPDF](https://github.com/pymupdf/PyMuPDF) through `pymupdf4llm`. PyMuPDF is licensed under the AGPL-3.0 or an Artifex commercial license, unlike this package's Apache-2.0 license.
 
 For Development Setup (requires [uv](https://docs.astral.sh/uv/)):
 ```bash
@@ -37,18 +39,6 @@ uv run ruff format .
 
 The [Execute Tests](.github/workflows/execute_main_tests.yaml) workflow runs Ruff, the tests on Python 3.12 and 3.13, and a wheel build on pushes and pull requests to `main`.
 
-## Configuration
-
-### Environment Variables
-
-The following environment variables are used by the `UnicodeReplaceProcessor` component (`normalize` extra).
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `GOOGLE_API_KEY` | A Gemini API key | `None` |
-| `GOOGLE_GEMINI_MODEL` | A Gemini model name | `gemini-2.0-flash` | 
-
-
 ## Usage
 
 ```python
@@ -61,7 +51,7 @@ splitter = MarkdownSplitter()
 sections = splitter.split_text(markdown_text)
 
 # Split from file
-sections = MarkdownSplitter.from_file("document.md")
+sections = splitter.split_file("document.md")
 
 # Nested outline instead of a flat list
 outline = splitter.get_document_outline(markdown_text)
@@ -78,21 +68,19 @@ markdown_text = PyMuPDFMParser.to_markdown(
 )
 ```
 
-Replace non-ASCII characters in each section with their closest ASCII equivalents (`normalize` extra). This makes one Gemini API call per section:
+### Unicode normalization
+
+`split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents and siblings use the transliterated headers.
 ```python
-from google import genai
+text = "# Café\nnaïve — “quoted”"
 
-from markdown_chunkify import MarkdownSplitter
-from markdown_chunkify import UnicodeReplaceProcessor
-
-client = genai.Client()  # Reads the API key from GOOGLE_API_KEY
-processor = UnicodeReplaceProcessor(client=client)
-
-sections = MarkdownSplitter().split_text(markdown_text)
-normalized_sections = [processor.process_text(section) for section in sections]
+splitter.split_text(text)[0].section_text  # 'naive - "quoted"'
+splitter.split_text(text, normalize_unicode=False)[0].section_text  # 'naïve — “quoted”'
 ```
 
-A normalized section has `metadata.normalized` set to `True` and keeps the original header and text in `metadata.original_content`. If a call fails, the original section is returned with the error in `metadata.error`.
+Transliteration also rewrites text that has no Latin form: `Привет` becomes `Privet`, `北京` becomes `BeiJing` and emoji become names such as `:grinning:`. Code blocks are transliterated too, so `x = "é"` becomes `x = "e"`. Pass `normalize_unicode=False` for documents where that matters.
+
+Headers are found before the text is transliterated, so spans still point at the source text and a fullwidth `＃` does not become a header. `metadata.normalized` is `True` for sections whose header or text changed. `get_document_outline` always returns the source text.
 
 ### Limitations
 
@@ -111,37 +99,41 @@ from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
 
-**MarkdownContent:** The base data structure representing a Markdown section. It contains the header and content of a section. It's used as a base class for the `Section` model, and as a generation schema for structured output responses
+**MarkdownContent:** The base data structure representing a Markdown section. It contains the header and content of a section and is the base class of the `Section` model.
 ```python
 class MarkdownContent(BaseModel):
-    section_header: str                         # The header of the section (without #)
-    section_text: str                           # The content of the section
+    section_header: str  # The header of the section (without #)
+    section_text: str  # The content of the section
 ```
 
 **Section:** The primary data structure representing a Markdown section. It contains the header level, metadata, and content of a section.
 ```python
 class Section(MarkdownContent):
-    header_level: int                           # Number of # symbols (1-6), 0 for text before the first header
-    metadata: SectionMetadata                   # Processing and hierarchy information
+    # Number of # symbols (1-6), 0 for text before the first header
+    header_level: int
+    # Normalization and hierarchy information
+    metadata: SectionMetadata
 
-    def to_markdown(self) -> str:               # Convert section back to Markdown
+    # Convert the section back to Markdown
+    def to_markdown(self) -> str: ...
 ```
 
-**SectionMetadata:** A Section's metadata, containing information about the section's processing and hierarchy (i.e., from information about the parent headers and text normalization status).
+**SectionMetadata:** A Section's metadata: whether Unicode normalization changed it, its parent and sibling headers, and where it is in the source text.
 ```python
 class SectionMetadata(BaseModel):
-    token_count: int | None                     # Generation token count
-    model_version: str | None                   # Model used for normalization
-    normalized: bool                            # Whether Unicode normalization succeeded
-    error: str | None                           # Error message if normalization failed
-    original_content: MarkdownContent | None    # Pre-normalization content
-    parents: dict[str, str | None]              # Header hierarchy information
-    siblings: list[str]                         # Headers at the same level with the same parent
-    span: tuple[int, int] | None                # Start (inclusive) and end (exclusive) offsets in the source text
-    char_count: int | None                      # Number of characters in the span
+    # Whether Unicode normalization changed the header or text
+    normalized: bool
+    # Parent headers by level, such as {"h1": "Guide", "h2": "Install"}
+    parents: dict[str, str | None]
+    # Headers at the same level with the same parent
+    siblings: list[str]
+    # Start (inclusive) and end (exclusive) offsets in the source text
+    span: tuple[int, int] | None
+    # Number of characters in the span
+    char_count: int | None
 ```
 
-The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count characters in the string passed to `split_text`, including a byte order mark. A normalized section keeps the span and character count of the original text.
+The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count characters in the string passed to `split_text`, including a byte order mark. A normalized section keeps the span and character count of the source text, so `text[start:end]` returns the text before transliteration.
 
 ### Methods
 

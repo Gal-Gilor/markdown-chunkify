@@ -12,7 +12,10 @@ def _run(code: str) -> subprocess.CompletedProcess:
 
 
 def test_core_import_skips_optional_dependencies():
-    """Importing the splitter and models does not load the PDF or Gemini dependencies."""
+    """Importing the splitter and models does not load the PDF dependencies.
+
+    The Gemini dependencies were removed and are checked so they are not added back.
+    """
     result = _run(
         "import sys\n"
         "from markdown_chunkify import MarkdownSplitter, Section, SectionMetadata\n"
@@ -26,7 +29,6 @@ def test_core_import_skips_optional_dependencies():
 @pytest.mark.parametrize(
     "name, blocked_module, extra",
     [
-        ("UnicodeReplaceProcessor", "google", "normalize"),
         ("PyMuPDFMParser", "pymupdf4llm", "pdf"),
     ],
 )

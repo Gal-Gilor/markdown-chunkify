@@ -52,26 +52,26 @@ def test_sibling_headers(splitter, sample_markdown):
     assert sections[-1].metadata.siblings == ["Header 2.1"]
 
 
-def test_file_operations(tmp_path):
+def test_file_operations(splitter, tmp_path):
     # Create a temporary markdown file
     md_file = tmp_path / "test.md"
     md_file.write_text("# Test\nContent")
 
-    sections = MarkdownSplitter.from_file(md_file)
+    sections = splitter.split_file(md_file)
     assert len(sections) == 1
     assert sections[0].section_header == "Test"
 
 
-def test_file_not_found():
+def test_file_not_found(splitter):
     """Test file not found error."""
     with pytest.raises(FileNotFoundError):
-        MarkdownSplitter.from_file("nonexistent.md")
+        splitter.split_file("nonexistent.md")
 
 
-def test_is_directory(tmp_path):
+def test_is_directory(splitter, tmp_path):
     """Test if the path is a directory."""
     with pytest.raises(IsADirectoryError):
-        MarkdownSplitter.from_file(tmp_path)
+        splitter.split_file(tmp_path)
 
 
 def test_header_level_counting(splitter):
@@ -357,12 +357,12 @@ def test_max_siblings_bounds_large_documents():
     assert max(len(s.metadata.siblings) for s in sections) == 4
 
 
-def test_from_file_max_siblings(tmp_path):
-    """from_file passes max_siblings to the splitter."""
+def test_split_file_max_siblings(tmp_path):
+    """split_file uses the splitter's max_siblings."""
     md_file = tmp_path / "test.md"
     md_file.write_text("## A\n## B\n## C")
 
-    sections = MarkdownSplitter.from_file(md_file, max_siblings=1)
+    sections = MarkdownSplitter(max_siblings=1).split_file(md_file)
 
     assert [s.metadata.siblings for s in sections] == [["B"], ["A"], ["B"]]
 
@@ -381,12 +381,12 @@ def test_byte_order_mark_in_outline(splitter):
     assert [(node["level"], node["header"]) for node in outline] == [(1, "Title")]
 
 
-def test_byte_order_mark_in_file(tmp_path):
-    """from_file reads a UTF-8 file with a byte order mark."""
+def test_byte_order_mark_in_file(splitter, tmp_path):
+    """split_file reads a UTF-8 file with a byte order mark."""
     md_file = tmp_path / "bom.md"
     md_file.write_bytes("\ufeff# Title\nText".encode("utf-8"))
 
-    sections = MarkdownSplitter.from_file(md_file)
+    sections = splitter.split_file(md_file)
 
     assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
     assert sections[0].section_text == "Text"
@@ -491,3 +491,75 @@ def test_span_includes_byte_order_mark_offset(splitter):
 
     assert sections[0].metadata.span == (1, 13)
     assert text[1:13] == "# Title\nText"
+
+
+def test_normalizes_unicode_by_default(splitter):
+    """Headers, text, parents and siblings are transliterated to ASCII."""
+    sections = splitter.split_text("# Café\nnaïve — “quoted”\n## Straße\nx\n## Ñu\ny")
+
+    assert [s.section_header for s in sections] == ["Cafe", "Strasse", "Nu"]
+    assert sections[0].section_text == 'naive - "quoted"'
+    assert sections[1].metadata.parents == {"h1": "Cafe"}
+    assert sections[1].metadata.siblings == ["Nu"]
+    assert sections[2].metadata.siblings == ["Strasse"]
+
+
+def test_normalize_unicode_disabled(splitter):
+    """With normalize_unicode=False, sections keep the source text."""
+    text = "# Café\nnaïve\n## Straße\nx"
+    sections = splitter.split_text(text, normalize_unicode=False)
+
+    assert [s.section_header for s in sections] == ["Café", "Straße"]
+    assert sections[0].section_text == "naïve"
+    assert sections[1].metadata.parents == {"h1": "Café"}
+    assert not any(s.metadata.normalized for s in sections)
+    start, end = sections[0].metadata.span
+    assert text[start:end] == "# Café\nnaïve"
+
+
+def test_normalized_spans_point_at_source(splitter):
+    """Normalization keeps spans and character counts on the source text."""
+    text = "Préface\n# Café\nStraße straße\n## B\nb"
+    normalized = splitter.split_text(text)
+    source = splitter.split_text(text, normalize_unicode=False)
+
+    assert [s.metadata.span for s in normalized] == [s.metadata.span for s in source]
+    assert [s.metadata.char_count for s in normalized] == [
+        s.metadata.char_count for s in source
+    ]
+    assert normalized[0].section_text == "Preface"
+
+
+def test_normalized_flag_marks_changed_sections(splitter):
+    """Only sections whose header or text changed are marked as normalized."""
+    sections = splitter.split_text("# Plain\ntext\n# Café\ntext\n# Plain 2\nnaïve")
+
+    assert [s.metadata.normalized for s in sections] == [False, True, True]
+
+
+def test_fullwidth_hash_does_not_become_a_header(splitter):
+    """Headers are found before normalization, so a fullwidth '＃' stays text."""
+    sections = splitter.split_text("# Title\n＃ Not a header")
+
+    assert [s.section_header for s in sections] == ["Title"]
+    assert sections[0].section_text == "# Not a header"
+
+
+def test_outline_keeps_source_text(splitter):
+    """get_document_outline returns the source text, without normalization."""
+    outline = splitter.get_document_outline("# Café\nnaïve")
+
+    assert (outline[0]["header"], outline[0]["content"]) == ("Café", "naïve")
+    assert "normalized" not in outline[0]
+
+
+def test_split_file_normalize_unicode(splitter, tmp_path):
+    """split_file normalizes by default and passes normalize_unicode through."""
+    md_file = tmp_path / "unicode.md"
+    md_file.write_text("# Café\nnaïve", encoding="utf-8")
+
+    normalized = splitter.split_file(md_file)
+    source = splitter.split_file(md_file, normalize_unicode=False)
+
+    assert (normalized[0].section_header, normalized[0].section_text) == ("Cafe", "naive")
+    assert (source[0].section_header, source[0].section_text) == ("Café", "naïve")
