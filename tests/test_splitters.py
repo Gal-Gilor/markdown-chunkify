@@ -456,3 +456,38 @@ def test_front_matter_must_start_with_a_key(splitter, text):
         (1, "Title"),
         (2, "Next"),
     ]
+
+
+def test_span_slices_section_from_source(splitter, sample_markdown):
+    """Each span slices the header line and section text out of the source."""
+    sections = splitter.split_text(sample_markdown)
+
+    for section in sections:
+        start, end = section.metadata.span
+        assert sample_markdown[start:end].endswith(section.section_text)
+        assert sample_markdown[start:end].lstrip().startswith("#")
+        assert section.metadata.char_count == end - start
+
+
+def test_span_offsets(splitter):
+    """Spans skip leading blank lines and trailing whitespace, and exclude children."""
+    text = "\n\nintro  \n\n# A\nText A\n## B   \n\n\n# C\n"
+    sections = splitter.split_text(text)
+
+    assert [s.metadata.span for s in sections] == [(2, 7), (11, 21), (22, 26), (32, 35)]
+    assert [text[slice(*s.metadata.span)] for s in sections] == [
+        "intro",
+        "# A\nText A",
+        "## B",
+        "# C",
+    ]
+    assert [s.metadata.char_count for s in sections] == [5, 10, 4, 3]
+
+
+def test_span_includes_byte_order_mark_offset(splitter):
+    """Spans are offsets in the text as passed in, byte order mark included."""
+    text = "﻿# Title\nText"
+    sections = splitter.split_text(text)
+
+    assert sections[0].metadata.span == (1, 13)
+    assert text[1:13] == "# Title\nText"

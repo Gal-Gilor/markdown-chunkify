@@ -262,6 +262,9 @@ class MarkdownSplitter(BaseSplitter):
                 - level (int): The header level (1 for H1, 2 for H2, etc.)
                 - children (List[Dict]): Nested headers under this header
                 - siblings (List[str]): Headers at the same level with the same parent
+                - span (tuple[int, int]): The start and end offsets of the node's header
+                  line and content in `text`, without leading blank lines and trailing
+                  whitespace
                 Text before the first header is the first node, with level 0 and an
                 empty header.
 
@@ -287,9 +290,11 @@ class MarkdownSplitter(BaseSplitter):
                             "level": 2,
                             "children": [],
                             "siblings": [],
+                            "span": (22, 46),
                         }
                     ],
                     "siblings": ["Header 2"],
+                    "span": (1, 21),
                 },
                 {
                     "header": "Header 2",
@@ -297,10 +302,13 @@ class MarkdownSplitter(BaseSplitter):
                     "level": 1,
                     "children": [],
                     "siblings": ["Header 1"],
+                    "span": (47, 67),
                 },
             ]
         """
-        text = text.removeprefix(_BYTE_ORDER_MARK)
+        # Spans are offsets in the text as passed in, byte order mark included
+        offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
+        text = text[offset:]
         if not text.strip():
             logger.warning("`get_document_outline` received empty text input.")
             return []
@@ -308,8 +316,10 @@ class MarkdownSplitter(BaseSplitter):
         headers = self._find_headers(text)
         document_outline = []
 
-        preamble = self._trim(text[: headers[0][0] if headers else len(text)])
+        preamble_end = headers[0][0] if headers else len(text)
+        preamble = self._trim(text[:preamble_end])
         if preamble:
+            preamble_start = offset + text.index(preamble, 0, preamble_end)
             document_outline.append(
                 {
                     "header": "",
@@ -317,20 +327,23 @@ class MarkdownSplitter(BaseSplitter):
                     "level": 0,
                     "children": [],
                     "siblings": [],
+                    "span": (preamble_start, preamble_start + len(preamble)),
                 }
             )
 
         # Nodes on the path from the top level to the current header
         node_stack = []
 
-        for i, (_, content_start, level, header_text) in enumerate(headers):
+        for i, (line_start, content_start, level, header_text) in enumerate(headers):
             content_end = headers[i + 1][0] if i + 1 < len(headers) else len(text)
+            span_end = line_start + len(text[line_start:content_end].rstrip())
             node = {
                 "header": header_text,
                 "content": self._trim(text[content_start:content_end]),
                 "level": level,
                 "children": [],
                 "siblings": [],
+                "span": (offset + line_start, offset + span_end),
             }
 
             while node_stack and node_stack[-1]["level"] >= level:
@@ -363,7 +376,8 @@ class MarkdownSplitter(BaseSplitter):
                 - section_header (str): The header text
                 - section_text (str): The content under the header
                 - header_level (int): The level of the header
-                - metadata (SectionMetadata): Contains parent headers and sibling information
+                - metadata (SectionMetadata): Contains parent headers, sibling information,
+                  the section's span and its character count
         """
         parent_headers = parent_headers or {}
         sections = []
@@ -375,7 +389,10 @@ class MarkdownSplitter(BaseSplitter):
                     section_text=node["content"],
                     header_level=node["level"],
                     metadata=SectionMetadata(
-                        parents=dict(parent_headers), siblings=node["siblings"]
+                        parents=dict(parent_headers),
+                        siblings=node["siblings"],
+                        span=node["span"],
+                        char_count=node["span"][1] - node["span"][0],
                     ),
                 )
             )
@@ -408,6 +425,10 @@ class MarkdownSplitter(BaseSplitter):
                 - metadata (SectionMetadata): Contains:
                     - parents (Dict[str, str]): Parent headers by level
                     - siblings (List[str]): Other headers at same level with same parent
+                    - span (tuple[int, int]): The start and end offsets of the header line
+                      and section text in `text`, so `text[start:end]` is the section as
+                      written
+                    - char_count (int): The number of characters in the span
                 Text before the first header, or a document without headers, is returned
                 as a section with level 0 and an empty header.
 
@@ -428,8 +449,7 @@ class MarkdownSplitter(BaseSplitter):
             >>> sections[1].metadata.siblings
             ['Sub Topic B']
         """
-        text = text.removeprefix(_BYTE_ORDER_MARK)
-        if not text.strip():
+        if not text.removeprefix(_BYTE_ORDER_MARK).strip():
             logger.warning("`split_text` received empty text input.")
             return []
 

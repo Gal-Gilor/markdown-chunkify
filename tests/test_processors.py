@@ -25,12 +25,17 @@ def section():
         section_header="Cafe",
         section_text="Café menu",
         header_level=2,
-        metadata=SectionMetadata(parents={"h1": "Places"}, siblings=["Bar", "Diner"]),
+        metadata=SectionMetadata(
+            parents={"h1": "Places"},
+            siblings=["Bar", "Diner"],
+            span=(10, 27),
+            char_count=17,
+        ),
     )
 
 
 def test_normalized_section_keeps_hierarchy(section):
-    """The normalized section keeps its parents and siblings."""
+    """The normalized section keeps its parents, siblings and source span."""
     processor = UnicodeReplaceProcessor(client=None)
     normalized = processor._create_normalized_section(_response("Cafe", "Cafe menu"), section)
 
@@ -38,6 +43,8 @@ def test_normalized_section_keeps_hierarchy(section):
     assert normalized.section_text == "Cafe menu"
     assert normalized.metadata.parents == {"h1": "Places"}
     assert normalized.metadata.siblings == ["Bar", "Diner"]
+    assert normalized.metadata.span == (10, 27)
+    assert normalized.metadata.char_count == 17
 
 
 @pytest.mark.parametrize(

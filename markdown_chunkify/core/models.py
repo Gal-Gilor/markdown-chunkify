@@ -29,6 +29,16 @@ class SectionMetadata(BaseModel):
         default_factory=list,
         description="List of sibling section headers at the same level with same parent",
     )
+    span: tuple[int, int] | None = Field(
+        None,
+        description=(
+            "The start (inclusive) and end (exclusive) character offsets of the section, "
+            "header line included, in the source text"
+        ),
+    )
+    char_count: int | None = Field(
+        None, description="The number of characters in the section's span"
+    )
 
 
 class Section(MarkdownContent):
