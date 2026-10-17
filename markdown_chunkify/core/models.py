@@ -12,14 +12,9 @@ class MarkdownContent(BaseModel):
 class SectionMetadata(BaseModel):
     """Metadata fields for a Markdown section."""
 
-    token_count: int | None = Field(None, description="Generation token count")
-    model_version: str | None = Field(None, description="The model that was used.")
     normalized: bool = Field(
-        False, description="Flag indicating if the content is normalized"
-    )
-    error: str | None = Field(None, description="Error message if normalization failed")
-    original_content: MarkdownContent | None = Field(
-        None, description="The original section content if thew section was normalized"
+        False,
+        description="Whether Unicode normalization changed the section header or text",
     )
     parents: dict[str, str | None] = Field(
         default_factory=dict,

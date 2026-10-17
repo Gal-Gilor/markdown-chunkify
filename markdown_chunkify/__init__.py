@@ -1,13 +1,15 @@
 import importlib
+import logging
 
 from markdown_chunkify.components.splitters import MarkdownSplitter
 from markdown_chunkify.core.models import Section
 from markdown_chunkify.core.models import SectionMetadata
 
+logging.getLogger(__name__).addHandler(logging.NullHandler())
+
 # Components that need an optional extra are imported on first access.
 _OPTIONAL_COMPONENTS = {
     "PyMuPDFMParser": ("markdown_chunkify.components.parsers", "pdf"),
-    "UnicodeReplaceProcessor": ("markdown_chunkify.components.processors", "normalize"),
 }
 
 
@@ -32,5 +34,4 @@ __all__ = [
     "PyMuPDFMParser",
     "Section",
     "SectionMetadata",
-    "UnicodeReplaceProcessor",
 ]

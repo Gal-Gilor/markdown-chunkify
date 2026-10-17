@@ -1,6 +1,0 @@
-Convert the following Markdown text to ASCII-compatible format. 
-Replace non-ASCII characters with their closest ASCII equivalents, while preserving the Markdown formatting.
-
-```markdown
-{{section_content}}
-```

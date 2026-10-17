@@ -17,11 +17,6 @@ dependencies = [
 pdf = [
     "pymupdf4llm>=0.0.17,<0.0.18",
 ]
-normalize = [
-    "google-genai>=1.2.0,<2",
-    "jinja2>=3.1.5,<4",
-    "tenacity>=9.0.0,<10",
-]
 
 [project.urls]
 Github = "https://github.com/Gal-Gilor/markdown-chunkify"

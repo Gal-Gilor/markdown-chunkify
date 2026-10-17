@@ -1,10 +1,8 @@
 from abc import ABC
 from abc import abstractmethod
 from pathlib import Path
-from typing import Generic
-from typing import TypeVar
 
-T = TypeVar("T")
+from markdown_chunkify.core.models import Section
 
 
 class BaseParser(ABC):
@@ -23,30 +21,13 @@ class BaseParser(ABC):
 
 class BaseSplitter(ABC):
     @abstractmethod
-    def split_text(self, text: str) -> list[str]:
-        """Split text into chunks.
+    def split_text(self, text: str) -> list[Section]:
+        """Split text into sections.
 
         Args:
             text: Text to split
 
         Returns:
-            list[Any]: List of objects containing the split text, or the split text itself.
-        """
-        pass
-
-
-class BaseProcessor(ABC, Generic[T]):
-    @abstractmethod
-    def process_text(self, section: T) -> T:
-        """Normalize Unicode characters.
-
-        Args:
-            content: Content to normalize
-
-        Returns:s
-            Normalized content of the same type
-
-        Raises:
-            NormalizationError: If normalization fails
+            list[Section]: The sections of the text in document order.
         """
         pass
