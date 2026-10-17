@@ -6,9 +6,9 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 
 ## Features
 
-- Lines inside fenced code blocks (```` ``` ```` or `~~~`) are never treated as headers, and section text keeps code blocks exactly as written
+- Lines inside fenced code blocks (```` ``` ```` or `~~~`, including fences in list items), HTML comment blocks and YAML front matter are never treated as headers. Section text keeps them exactly as written
 - Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
-- Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections
+- Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections. `MarkdownSplitter(max_siblings=10)` lists only the 10 nearest siblings
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - Optional extras: PDF to Markdown conversion (`pdf`) and Gemini-powered Unicode normalization (`normalize`)
 
@@ -70,8 +70,37 @@ Convert a PDF to Markdown (`pdf` extra):
 ```python
 from markdown_chunkify import PyMuPDFMParser
 
-markdown_text = PyMuPDFMParser.to_markdown(file_path="document.pdf")
+# Returns the Markdown and saves it as output/report.md
+markdown_text = PyMuPDFMParser.to_markdown(
+    file_path="docs/report.pdf",
+    destination_path="output",  # Optional
+)
 ```
+
+Replace non-ASCII characters in each section with their closest ASCII equivalents (`normalize` extra). This makes one Gemini API call per section:
+```python
+from google import genai
+
+from markdown_chunkify import MarkdownSplitter
+from markdown_chunkify import UnicodeReplaceProcessor
+
+client = genai.Client()  # Reads the API key from GOOGLE_API_KEY
+processor = UnicodeReplaceProcessor(client=client)
+
+sections = MarkdownSplitter().split_text(markdown_text)
+normalized_sections = [processor.process_text(section) for section in sections]
+```
+
+A normalized section has `metadata.normalized` set to `True` and keeps the original header and text in `metadata.original_content`. If a call fails, the original section is returned with the error in `metadata.error`.
+
+### Limitations
+
+- Only ATX headers (`#` to `######`) are recognized. Setext headers, underlined with `===` or `---`, stay in the section text.
+- Headers and fences inside blockquotes (`> # Title`) are not recognized.
+- A line indented by 4 or more spaces that starts with ```` ``` ```` or `~~~` is treated as a fence, even inside an indented code block. If that fence is never closed, the headers after it are treated as text and a warning is logged.
+- An HTML comment is only recognized when `<!--` starts the line. A comment that opens mid-line (`text <!--`) does not hide the `#` lines inside it.
+- A document that starts with `---` is treated as having YAML front matter only if the line after it is a `key:` entry and every line up to the next `---` or `...` looks like YAML (`key: value`, `- item`, indented lines, comments or blank lines). Otherwise the `---` is a horizontal rule and the headers after it are split as usual.
+- Without `max_siblings`, each section lists every other header at its level under the same parent. With n such headers, the lists hold n * (n - 1) names: 6,000 headers at one level take a few seconds to split. Set `max_siblings` for documents like that.
 
 ## Data Models
 

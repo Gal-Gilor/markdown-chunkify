@@ -1,5 +1,6 @@
 import json
 import os
+import re
 
 from google import genai
 from google.genai import types
@@ -161,8 +162,16 @@ class UnicodeReplaceProcessor(BaseProcessor):
                 f"{original_section.section_header}"
             )
 
+            # The model may echo the header with its '#' markers. Strip exactly the
+            # section's own markers so a header like "# Foo" under "##" stays intact.
+            section_header = re.sub(
+                rf"^#{{{original_section.header_level}}}[ \t]+",
+                "",
+                response_text["section_header"],
+            )
+
             return Section(
-                section_header=response_text["section_header"],
+                section_header=section_header,
                 section_text=response_text["section_text"],
                 header_level=original_section.header_level,
                 metadata=SectionMetadata(
@@ -174,6 +183,7 @@ class UnicodeReplaceProcessor(BaseProcessor):
                         section_text=original_section.section_text,
                     ),
                     parents=original_section.metadata.parents,
+                    siblings=original_section.metadata.siblings,
                 ),
             )
 

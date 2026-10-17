@@ -264,3 +264,195 @@ def test_no_text_lost(splitter, sample_markdown):
     assert [line for line in output_lines if line.strip()] == [
         line for line in text.splitlines() if line.strip()
     ]
+
+
+def test_header_starting_with_hash(splitter):
+    """A header whose text starts with '#' keeps it."""
+    sections = splitter.split_text("## # Foo\nText")
+
+    assert sections[0].section_header == "# Foo"
+
+
+def test_front_matter_is_not_split(splitter):
+    """'#' lines in YAML front matter are not headers; the front matter is the preamble."""
+    front_matter = "---\ntitle: Guide\n# A YAML comment\n---"
+    sections = splitter.split_text(f"{front_matter}\n# Real\nText")
+
+    assert [s.section_header for s in sections] == ["", "Real"]
+    assert sections[0].section_text == front_matter
+
+
+def test_unclosed_front_matter_is_a_thematic_break(splitter):
+    """A leading '---' without a closing line does not hide the headers after it."""
+    sections = splitter.split_text("---\n# A\nText")
+
+    assert [s.section_header for s in sections] == ["", "A"]
+
+
+@pytest.mark.parametrize(
+    "comment",
+    ["<!--\n# Hidden\n-->", "<!-- note\n# Hidden -->", "<!-- one line -->"],
+)
+def test_html_comment_block(splitter, comment):
+    """'#' lines inside an HTML comment block are not headers."""
+    sections = splitter.split_text(f"# A\n{comment}\n# B")
+
+    assert [s.section_header for s in sections] == ["A", "B"]
+    assert sections[0].section_text == comment
+
+
+@pytest.mark.parametrize(
+    "list_item",
+    [
+        "- ```bash\n  # A comment\n  ```",
+        "1. Install:\n   ```bash\n   # A comment\n   ```",
+        "- Step\n    - ```bash\n      # A comment\n      ```",
+    ],
+)
+def test_fence_in_list_item(splitter, list_item):
+    """Fences on a list item line, or indented under one, hide their '#' lines."""
+    sections = splitter.split_text(f"# A\n{list_item}\n# B")
+
+    assert [s.section_header for s in sections] == ["A", "B"]
+    assert sections[0].section_text == list_item
+
+
+def test_setext_headers_are_text(splitter):
+    """Setext headers are not supported and stay in the section text."""
+    sections = splitter.split_text("# A\nTitle\n=====\nText")
+
+    assert len(sections) == 1
+    assert sections[0].section_text == "Title\n=====\nText"
+
+
+def test_max_siblings_keeps_nearest():
+    """max_siblings keeps the siblings nearest to the section, in document order."""
+    text = "\n".join(f"## H{index}" for index in range(6))
+    sections = MarkdownSplitter(max_siblings=2).split_text(text)
+
+    assert sections[0].metadata.siblings == ["H1", "H2"]
+    assert sections[3].metadata.siblings == ["H2", "H4"]
+    assert sections[5].metadata.siblings == ["H3", "H4"]
+
+
+def test_max_siblings_zero():
+    """max_siblings=0 lists no siblings."""
+    sections = MarkdownSplitter(max_siblings=0).split_text("## A\n## B")
+
+    assert [s.metadata.siblings for s in sections] == [[], []]
+
+
+def test_invalid_max_siblings():
+    """max_siblings cannot be negative."""
+    with pytest.raises(ValueError):
+        MarkdownSplitter(max_siblings=-1)
+
+
+def test_max_siblings_bounds_large_documents():
+    """With max_siblings, many headers at one level get short sibling lists."""
+    text = "\n".join(f"## H{index}\nText" for index in range(5000))
+    sections = MarkdownSplitter(max_siblings=4).split_text(text)
+
+    assert len(sections) == 5000
+    assert max(len(s.metadata.siblings) for s in sections) == 4
+
+
+def test_from_file_max_siblings(tmp_path):
+    """from_file passes max_siblings to the splitter."""
+    md_file = tmp_path / "test.md"
+    md_file.write_text("## A\n## B\n## C")
+
+    sections = MarkdownSplitter.from_file(md_file, max_siblings=1)
+
+    assert [s.metadata.siblings for s in sections] == [["B"], ["A"], ["B"]]
+
+
+def test_byte_order_mark_in_text(splitter):
+    """A UTF-8 byte order mark before the first header does not hide it."""
+    sections = splitter.split_text("\ufeff# Title\nText")
+
+    assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
+
+
+def test_byte_order_mark_in_outline(splitter):
+    """get_document_outline also ignores a byte order mark."""
+    outline = splitter.get_document_outline("\ufeff# Title\nText")
+
+    assert [(node["level"], node["header"]) for node in outline] == [(1, "Title")]
+
+
+def test_byte_order_mark_in_file(tmp_path):
+    """from_file reads a UTF-8 file with a byte order mark."""
+    md_file = tmp_path / "bom.md"
+    md_file.write_bytes("\ufeff# Title\nText".encode("utf-8"))
+
+    sections = MarkdownSplitter.from_file(md_file)
+
+    assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
+    assert sections[0].section_text == "Text"
+
+
+def test_front_matter_with_lists_and_comments(splitter):
+    """YAML front matter with lists, nested keys and comments is skipped."""
+    front_matter = (
+        "---\ntitle: Guide\ntags:\n  - one\n- two\n# A YAML comment\nauthor:\n"
+        "  name: Gal\n\n..."
+    )
+    sections = splitter.split_text(f"{front_matter}\n# Real\nText")
+
+    assert [s.section_header for s in sections] == ["", "Real"]
+    assert sections[0].section_text == front_matter
+
+
+def test_horizontal_rules_are_not_front_matter(splitter):
+    """Two '---' lines around Markdown content are horizontal rules, not front matter."""
+    sections = splitter.split_text("---\n# A\ntext\n---\n# B")
+
+    assert [s.section_header for s in sections] == ["", "A", "B"]
+    assert sections[1].section_text == "text\n---"
+
+
+@pytest.mark.parametrize(
+    "text, block, line_number",
+    [
+        ("# A\n    ```\n# B", "code fence", 2),
+        ("# A\nText\n<!--\n# B", "HTML comment", 3),
+    ],
+)
+def test_unclosed_block_logs_warning(splitter, caplog, text, block, line_number):
+    """An unclosed fence or HTML comment logs a warning naming where it starts."""
+    with caplog.at_level("WARNING", logger="markdown_chunkify"):
+        sections = splitter.split_text(text)
+
+    assert [s.section_header for s in sections] == ["A"]
+    assert f"The {block} that starts on line {line_number} is never closed" in caplog.text
+
+
+def test_closed_blocks_do_not_warn(splitter, caplog):
+    """Closed fences and HTML comments do not log a warning."""
+    with caplog.at_level("WARNING", logger="markdown_chunkify"):
+        splitter.split_text("# A\n```\ncode\n```\n<!--\nnote\n-->\n# B")
+
+    assert caplog.text == ""
+
+
+def test_mid_line_html_comment_is_not_recognized(splitter):
+    """A comment that opens mid-line does not hide the '#' lines inside it."""
+    sections = splitter.split_text("# A\ntext <!--\n# B\n-->")
+
+    assert [s.section_header for s in sections] == ["A", "B"]
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["---\n# Title\n---\n## Next", "---\n# Title\nAuthor: Gal\n---\n## Next"],
+)
+def test_front_matter_must_start_with_a_key(splitter, text):
+    """A '---' block whose first line is not a 'key:' entry is not front matter."""
+    sections = splitter.split_text(text)
+
+    assert [(s.header_level, s.section_header) for s in sections] == [
+        (0, ""),
+        (1, "Title"),
+        (2, "Next"),
+    ]
