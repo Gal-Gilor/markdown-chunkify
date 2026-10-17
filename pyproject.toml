@@ -10,12 +10,12 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
-    "pydantic>=2.10.6,<3",
+    "pydantic>=2.14.1",
 ]
 
 [project.optional-dependencies]
 pdf = [
-    "pymupdf4llm>=0.0.17,<0.0.18",
+    "pymupdf4llm>=1.28.2",
 ]
 
 [project.urls]
@@ -24,13 +24,13 @@ Issues = "https://github.com/Gal-Gilor/markdown-chunkify/issues"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.4,<9",
-    "pytest-cov>=6,<8",
-    "ruff>=0.14,<0.15",
+    "pytest>=9.1.1",
+    "pytest-cov>=7.1.0",
+    "ruff>=0.17.1",
 ]
 
 [build-system]
-requires = ["uv_build>=0.11.32,<0.12"]
+requires = ["uv_build>=0.13.1,<0.14"]
 build-backend = "uv_build"
 
 [tool.uv.build-backend]

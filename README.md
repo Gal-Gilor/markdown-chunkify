@@ -114,8 +114,8 @@ from markdown_chunkify import SectionMetadata
 **MarkdownContent:** The base data structure representing a Markdown section. It contains the header and content of a section. It's used as a base class for the `Section` model, and as a generation schema for structured output responses
 ```python
 class MarkdownContent(BaseModel):
-    section_header: str                         # The header of the section (without #)
-    section_text: str                           # The content of the section
+    section_header: str  # The header of the section (without #)
+    section_text: str  # The content of the section
 ```
 
 **Section:** The primary data structure representing a Markdown section. It contains the header level, metadata, and content of a section.
@@ -130,15 +130,17 @@ class Section(MarkdownContent):
 **SectionMetadata:** A Section's metadata, containing information about the section's processing and hierarchy (i.e., from information about the parent headers and text normalization status).
 ```python
 class SectionMetadata(BaseModel):
-    token_count: int | None                     # Generation token count
-    model_version: str | None                   # Model used for normalization
-    normalized: bool                            # Whether Unicode normalization succeeded
-    error: str | None                           # Error message if normalization failed
-    original_content: MarkdownContent | None    # Pre-normalization content
-    parents: dict[str, str | None]              # Header hierarchy information
-    siblings: list[str]                         # Headers at the same level with the same parent
-    span: tuple[int, int] | None                # Start (inclusive) and end (exclusive) offsets in the source text
-    char_count: int | None                      # Number of characters in the span
+    token_count: int | None  # Generation token count
+    model_version: str | None  # Model used for normalization
+    normalized: bool  # Whether Unicode normalization succeeded
+    error: str | None  # Error message if normalization failed
+    original_content: MarkdownContent | None  # Pre-normalization content
+    parents: dict[str, str | None]  # Header hierarchy information
+    siblings: list[str]  # Headers at the same level with the same parent
+    span: (
+        tuple[int, int] | None
+    )  # Start (inclusive) and end (exclusive) offsets in the source text
+    char_count: int | None  # Number of characters in the span
 ```
 
 The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count characters in the string passed to `split_text`, including a byte order mark. A normalized section keeps the span and character count of the original text.
