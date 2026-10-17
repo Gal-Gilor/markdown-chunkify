@@ -10,6 +10,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
 - Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections. `MarkdownSplitter(max_siblings=10)` lists only the 10 nearest siblings
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
+- Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written, and `metadata.char_count` is its length
 - Optional extras: PDF to Markdown conversion (`pdf`) and Gemini-powered Unicode normalization (`normalize`)
 
 ## Installation
@@ -130,7 +131,11 @@ class SectionMetadata(BaseModel):
     original_content: MarkdownContent | None    # Pre-normalization content
     parents: dict[str, str | None]              # Header hierarchy information
     siblings: list[str]                         # Headers at the same level with the same parent
+    span: tuple[int, int] | None                # Start (inclusive) and end (exclusive) offsets in the source text
+    char_count: int | None                      # Number of characters in the span
 ```
+
+The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count characters in the string passed to `split_text`, including a byte order mark. A normalized section keeps the span and character count of the original text.
 
 ### Methods
 

@@ -184,6 +184,8 @@ class UnicodeReplaceProcessor(BaseProcessor):
                     ),
                     parents=original_section.metadata.parents,
                     siblings=original_section.metadata.siblings,
+                    span=original_section.metadata.span,
+                    char_count=original_section.metadata.char_count,
                 ),
             )
 
