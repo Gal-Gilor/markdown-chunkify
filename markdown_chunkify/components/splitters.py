@@ -496,18 +496,20 @@ class MarkdownSplitter(BaseSplitter):
         logger.info(f"Successfully split the Markdown into {len(sections)} sections.")
         return sections
 
-    @classmethod
-    def from_file(
-        cls,
+    def split_file(
+        self,
         filepath: Union[str, Path],
         encoding: str = "utf-8-sig",
-        max_level: int = MAX_HEADER_LEVEL,
-        max_siblings: int | None = None,
+        normalize_unicode: bool = True,
     ) -> List[Section]:
-        """Create sections from a Markdown file.
+        """Split a Markdown file into sections, as `split_text` does.
 
-        The default encoding, 'utf-8-sig', reads UTF-8 files with or without a byte order
-        mark.
+        Args:
+            filepath (str | Path): The path to the Markdown file.
+            encoding (str): The file encoding. The default, 'utf-8-sig', reads UTF-8
+                files with or without a byte order mark.
+            normalize_unicode (bool): Transliterate headers and text to ASCII. See
+                `split_text`. Defaults to True.
         """
         path = Path(filepath)
         if not path.exists():
@@ -521,9 +523,8 @@ class MarkdownSplitter(BaseSplitter):
             raise IsADirectoryError(error_message)
 
         try:
-            splitter = cls(max_level=max_level, max_siblings=max_siblings)
             with path.open("r", encoding=encoding) as f:
-                return splitter.split_text(f.read())
+                return self.split_text(f.read(), normalize_unicode=normalize_unicode)
         except Exception as e:
             logger.error(
                 f"Failed to split the Markdown file: {path}. Error: {str(e)}", exc_info=True
