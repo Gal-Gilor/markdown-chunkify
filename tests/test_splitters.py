@@ -495,6 +495,24 @@ def test_byte_order_mark_in_file(splitter, tmp_path):
     assert sections[0].section_text == "Text"
 
 
+def test_split_file_spans_index_file_contents(splitter, tmp_path):
+    """split_file spans index into the file's contents, BOM and CRLF included."""
+    md_file = tmp_path / "crlf.md"
+    md_file.write_bytes("\ufeffIntro\r\n# A\r\nalpha\r\n## B\r\nbeta\r\n".encode("utf-8"))
+    contents = md_file.read_text(encoding="utf-8", newline="")
+
+    sections = splitter.split_file(md_file)
+
+    assert [s.metadata for s in sections] == [
+        s.metadata for s in splitter.split_text(contents)
+    ]
+    assert [contents[slice(*s.metadata.span)] for s in sections] == [
+        "Intro",
+        "# A\r\nalpha",
+        "## B\r\nbeta",
+    ]
+
+
 def test_front_matter_with_lists_and_comments(splitter):
     """YAML front matter with lists, nested keys and comments is skipped."""
     front_matter = (
