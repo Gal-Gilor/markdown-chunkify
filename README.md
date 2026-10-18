@@ -75,6 +75,33 @@ prompt_text = f"{section.breadcrumb()}\n\n{section.content}"
 
 Text before the first header returns an empty string. The breadcrumb is computed from `metadata.parents`, so it is not part of the serialized section.
 
+### Cleaning text from PDF parsers
+
+PDF parsers often produce ligatures (`ﬁ`, `ﬂ`), non-breaking spaces and fullwidth characters. A chunk with `ﬁnd` doesn't match a search for `find`, and entity extraction can miss the word. The splitter doesn't clean text. Clean it before calling `split_text`, so the spans index into the cleaned string you pass in.
+```python
+import unicodedata
+
+from markdown_chunkify import MarkdownSplitter
+
+clean = unicodedata.normalize("NFKC", pdf_markdown)
+clean = clean.replace("\u00ad", "").replace("\u200b", "")  # Soft hyphen, zero-width space
+sections = MarkdownSplitter().split_text(clean)
+```
+
+NFKC normalization from the standard library replaces ligatures, non-breaking spaces and fullwidth characters, and keeps accents:
+
+| Input | NFKC output |
+|---|---|
+| `ﬁnd ﬂow` | `find flow` |
+| `a\xa0b` (non-breaking space) | `a b` |
+| `ＡＢＣ１２３` (fullwidth) | `ABC123` |
+| `Müller` | `Müller` |
+| `x²` | `x2` |
+| `co\xadoperate` (soft hyphen) | unchanged |
+| `zero\u200bwidth` (zero-width space) | unchanged |
+
+NFKC also folds superscripts and subscripts, so `x²` becomes `x2`. It leaves soft hyphens and zero-width spaces in the text, so remove them with `str.replace`.
+
 ### Limitations
 
 - Only ATX headers (`#` to `######`) are recognized. Setext headers, underlined with `===` or `---`, stay in the section text.
