@@ -15,6 +15,7 @@ The first release on PyPI.
 - Unicode normalization is off by default. `split_text` and `split_file` keep the source text unless `normalize_unicode=True` is passed, which transliterates headers and text to ASCII with anyascii. anyascii is a new dependency. ([#15], [#16])
 - `metadata.parents` is typed `dict[str, str]` instead of `dict[str, str | None]`. ([#17])
 - A header with no text (`#`, `## ##` or only whitespace after the `#`) stays as text of the enclosing section. Before, it became a section with `#` or whitespace as its header. ([#17])
+- `get_document_outline` returns `OutlineNode` models instead of dicts. `OutlineNode` is exported from the package root, and `[node.model_dump() for node in outline]` returns the nodes as dicts. ([#24])
 
 ### Added
 
@@ -34,3 +35,4 @@ The first release on PyPI.
 [#15]: https://github.com/Gal-Gilor/markdown-chunkify/pull/15
 [#16]: https://github.com/Gal-Gilor/markdown-chunkify/pull/16
 [#17]: https://github.com/Gal-Gilor/markdown-chunkify/pull/17
+[#24]: https://github.com/Gal-Gilor/markdown-chunkify/pull/24
