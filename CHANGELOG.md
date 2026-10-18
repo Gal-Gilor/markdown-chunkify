@@ -30,7 +30,7 @@ The first release on PyPI.
 
 ### Changed
 
-- Raised the minimum version to pydantic 2.14.1 and removed the upper bound. ([#15])
+- The minimum pydantic version is now 2.0.2, and the upper bound is removed. ([#15], [#40])
 
 ### Fixed
 
@@ -45,3 +45,4 @@ The first release on PyPI.
 [#34]: https://github.com/Gal-Gilor/markdown-chunkify/pull/34
 [#37]: https://github.com/Gal-Gilor/markdown-chunkify/pull/37
 [#38]: https://github.com/Gal-Gilor/markdown-chunkify/pull/38
+[#40]: https://github.com/Gal-Gilor/markdown-chunkify/pull/40
