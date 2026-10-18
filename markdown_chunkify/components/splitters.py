@@ -28,8 +28,12 @@ _FENCE_OPEN_PATTERN = re.compile(
 )
 _FENCE_CLOSE_PATTERN = re.compile(r"^[ \t]*(`{3,}|~{3,})[ \t]*$")
 # An HTML comment block starts with '<!--' at the start of a line and ends on the line
-# that contains '-->'.
-_HTML_COMMENT_OPEN_PATTERN = re.compile(r"^ {0,3}<!--")
+# that contains '-->'. A <pre>, <script>, <style> or <textarea> block (CommonMark HTML
+# block type 1) starts with its opening tag at the start of a line and ends on the line
+# that contains its closing tag. Both are case-insensitive.
+_HTML_BLOCK_OPEN_PATTERN = re.compile(
+    r"^ {0,3}(?:<!--|<(pre|script|style|textarea)(?:[ \t>]|$))", re.IGNORECASE
+)
 _FRONT_MATTER_DELIMITERS = ("---", "...")
 # A YAML 'key:' entry. The first line of front matter must be one.
 _FRONT_MATTER_KEY_PATTERN = re.compile(r"^[\w\"'][^:]*:(?:[ \t]|$)")
@@ -53,8 +57,9 @@ class MarkdownSplitter(BaseSplitter):
     Key Features:
         - Splits Markdown text into sections based on headers
         - Gives each section an id (its position in document order) and its parent's id
-        - Ignores lines inside fenced code blocks (``` or ~~~), HTML comment blocks and
-          YAML front matter, so '#' lines there are not headers
+        - Ignores lines inside fenced code blocks (``` or ~~~), HTML comment blocks,
+          <pre>, <script>, <style> and <textarea> blocks and YAML front matter, so '#'
+          lines there are not headers
         - Keeps section text exactly as written, including code blocks
         - Returns text before the first header as a level-0 section with an empty header
         - Supports headers up to level 6, or a lower limit set with `max_level`
@@ -68,8 +73,12 @@ class MarkdownSplitter(BaseSplitter):
         - A line indented by 4 or more spaces that starts with ``` or ~~~ is treated as a
           fence, even when it is part of an indented code block. If such a fence is never
           closed, the headers after it are treated as text and a warning is logged.
-        - An HTML comment is only recognized when '<!--' starts the line. A comment that
-          opens mid-line ('text <!--') does not hide the '#' lines inside it.
+        - An HTML comment or a <pre>, <script>, <style> or <textarea> block is only
+          recognized when it starts the line. One that opens mid-line ('text <!--' or
+          'text <pre>') does not hide the '#' lines inside it.
+        - Headers inside <details> are split, as GitHub renders Markdown after a blank
+          line inside <details>. The <details> and </details> tags stay in the text of
+          the sections around them.
         - A header with no text ('#', '## ##' or only whitespace after the '#') is kept as
           text of the enclosing section, not an empty section.
 
@@ -154,10 +163,11 @@ class MarkdownSplitter(BaseSplitter):
         return 0
 
     def _find_headers(self, text: str) -> List[tuple[int, int, int, str]]:
-        """Find the headers outside fenced code blocks, HTML comments and front matter.
+        """Find the headers outside fenced code blocks, HTML blocks and front matter.
 
-        An unclosed fence or HTML comment runs to the end of the document, and a warning
-        is logged because the headers after it are treated as text.
+        HTML blocks are HTML comments and <pre>, <script>, <style> and <textarea>
+        blocks. An unclosed fence or HTML block runs to the end of the document, and a
+        warning is logged because the headers after it are treated as text.
 
         Returns:
             List[tuple[int, int, int, str]]: For each header, the offset where its line
@@ -165,8 +175,9 @@ class MarkdownSplitter(BaseSplitter):
         """
         headers = []
         fence = None
-        in_html_comment = False
-        # 1-based line number where the open fence or HTML comment started
+        # The text that ends the open HTML block: '-->' or a closing tag such as '</pre>'
+        html_block_end = None
+        # 1-based line number where the open fence or HTML block started
         block_start_line = 0
         position = 0
         lines = text.split("\n")
@@ -185,12 +196,16 @@ class MarkdownSplitter(BaseSplitter):
                     fence = None
                 continue
 
-            if in_html_comment:
-                in_html_comment = "-->" not in line
+            if html_block_end:
+                if html_block_end in line.lower():
+                    html_block_end = None
                 continue
 
-            if _HTML_COMMENT_OPEN_PATTERN.match(line):
-                in_html_comment = "-->" not in line[line.index("<!--") + 4 :]
+            if html_match := _HTML_BLOCK_OPEN_PATTERN.match(line):
+                tag = html_match.group(1)
+                block_end = f"</{tag.lower()}>" if tag else "-->"
+                if block_end not in line[html_match.end() :].lower():
+                    html_block_end = block_end
                 block_start_line = index + 1
                 continue
 
@@ -208,8 +223,13 @@ class MarkdownSplitter(BaseSplitter):
                 level = len(header_match.group(1))
                 headers.append((line_start, position, level, header_match.group(2)))
 
-        if fence or in_html_comment:
-            block = "code fence" if fence else "HTML comment"
+        if fence or html_block_end:
+            if fence:
+                block = "code fence"
+            elif html_block_end == "-->":
+                block = "HTML comment"
+            else:
+                block = f"<{html_block_end[2:-1]}> block"
             logger.warning(
                 f"The {block} that starts on line {block_start_line} is never closed. "
                 "Headers after it are treated as text."

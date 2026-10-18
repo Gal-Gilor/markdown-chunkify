@@ -6,7 +6,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 
 ## Features
 
-- Lines inside fenced code blocks (```` ``` ```` or `~~~`, including fences in list items), HTML comment blocks and YAML front matter are never treated as headers. Section text keeps them exactly as written
+- Lines inside fenced code blocks (```` ``` ```` or `~~~`, including fences in list items), HTML comment blocks, `<pre>`, `<script>`, `<style>` and `<textarea>` blocks and YAML front matter are never treated as headers. Section text keeps them exactly as written
 - Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
 - Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
@@ -125,7 +125,8 @@ Headers are found before the text is transliterated, so spans still point at the
 - Only ATX headers (`#` to `######`) are recognized. Setext headers, underlined with `===` or `---`, stay in the section text.
 - Headers and fences inside blockquotes (`> # Title`) are not recognized.
 - A line indented by 4 or more spaces that starts with ```` ``` ```` or `~~~` is treated as a fence, even inside an indented code block. If that fence is never closed, the headers after it are treated as text and a warning is logged.
-- An HTML comment is only recognized when `<!--` starts the line. A comment that opens mid-line (`text <!--`) does not hide the `#` lines inside it.
+- An HTML comment or a `<pre>`, `<script>`, `<style>` or `<textarea>` block is only recognized when it starts the line. One that opens mid-line (`text <!--` or `text <pre>`) does not hide the `#` lines inside it.
+- Headers inside `<details>` are split, as GitHub renders Markdown after a blank line inside `<details>`. The `<details>` and `</details>` tags stay in the text of the sections around them.
 - A header with no text (`#`, `## ##`, or only whitespace after the `#`) is kept as text of the enclosing section, not an empty section. CommonMark renders it as an empty heading.
 - A document that starts with `---` is treated as having YAML front matter only if the line after it is a `key:` entry and every line up to the next `---` or `...` looks like YAML (`key: value`, `- item`, indented lines, comments or blank lines). Otherwise the `---` is a horizontal rule and the headers after it are split as usual.
 

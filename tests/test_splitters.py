@@ -382,6 +382,45 @@ def test_html_comment_block(splitter, comment):
 
 
 @pytest.mark.parametrize(
+    "block",
+    [
+        "<pre>\n# Hidden\n</pre>",
+        "<script>\n# Hidden\n</script>",
+        "<style>\n# Hidden\n</style>",
+        "<textarea>\n# Hidden\n</textarea>",
+        '<PRE class="x">\n# Hidden\n</PRE>',
+        "<pre># a\n# b</pre>",
+    ],
+)
+def test_raw_html_block(splitter, block):
+    """'#' lines inside a <pre>, <script>, <style> or <textarea> block are not headers."""
+    sections = splitter.split_text(f"# A\n{block}\n# B")
+
+    assert [s.section_header for s in sections] == ["A", "B"]
+    assert sections[0].section_text == block
+
+
+@pytest.mark.parametrize("line", ["<pre>x</pre>", "<preview>"])
+def test_line_that_does_not_open_raw_html_block(splitter, line):
+    """A <pre> closed on its own line, or a tag like <preview>, hides no headers."""
+    sections = splitter.split_text(f"# A\n{line}\n# B\n# C")
+
+    assert [s.section_header for s in sections] == ["A", "B", "C"]
+
+
+def test_details_headers_are_split(splitter):
+    """Headers inside <details> are split.
+
+    GitHub renders Markdown after a blank line inside <details> as Markdown, so the
+    '# Inside' line is a heading there too.
+    """
+    details = "<details>\n<summary>More</summary>\n\n# Inside\n\n</details>"
+    sections = splitter.split_text(f"# A\n{details}")
+
+    assert [s.section_header for s in sections] == ["A", "Inside"]
+
+
+@pytest.mark.parametrize(
     "list_item",
     [
         "- ```bash\n  # A comment\n  ```",
@@ -473,10 +512,11 @@ def test_horizontal_rules_are_not_front_matter(splitter):
     [
         ("# A\n    ```\n# B", "code fence", 2),
         ("# A\nText\n<!--\n# B", "HTML comment", 3),
+        ("# A\n<pre>\n# B", "<pre> block", 2),
     ],
 )
 def test_unclosed_block_logs_warning(splitter, caplog, text, block, line_number):
-    """An unclosed fence or HTML comment logs a warning naming where it starts."""
+    """An unclosed fence or HTML block logs a warning naming where it starts."""
     with caplog.at_level("WARNING", logger="markdown_chunkify"):
         sections = splitter.split_text(text)
 
