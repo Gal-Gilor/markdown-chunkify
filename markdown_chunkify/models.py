@@ -51,10 +51,16 @@ class Section(BaseModel):
     metadata: SectionMetadata = Field(..., description="The Markdown section metadata.")
 
     def to_markdown(self) -> str:
-        """Convert the section to a Markdown string."""
+        """Convert the section to a Markdown string.
+
+        A section without content returns only its header line.
+        """
         if self.level == 0:
             return self.content
-        return f"{'#' * self.level} {self.header}\n\n{self.content}"
+        header_line = f"{'#' * self.level} {self.header}"
+        if not self.content:
+            return header_line
+        return f"{header_line}\n\n{self.content}"
 
     def breadcrumb(self, separator: str = " > ") -> str:
         """Join the parent headers and the section's own header, such as 'Docker > Setup'.

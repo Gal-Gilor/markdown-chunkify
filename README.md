@@ -90,7 +90,7 @@ from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
 
-The models are frozen, so to change a section, call `section.model_copy(update={"content": "..."})`, which returns a changed copy.
+The models are frozen, so to change a section, call `section.model_copy(update={"content": "..."})`, which returns a changed copy. The freezing is shallow: `metadata.parents` is a plain dict, so treat it as read-only.
 
 ### Section
 

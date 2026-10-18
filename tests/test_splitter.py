@@ -121,6 +121,12 @@ def test_to_markdown(sample_markdown):
     assert sections[0].to_markdown() == "# Header 1\n\nContent 1"
 
 
+def test_to_markdown_without_content():
+    """A section without content returns only its header line."""
+    sections = splitter.split_text("# A\n## B")
+    assert sections[0].to_markdown() == "# A"
+
+
 def test_breadcrumb(nested_markdown):
     """The breadcrumb joins the parent headers and the section's own header."""
     sections = splitter.split_text(nested_markdown)
