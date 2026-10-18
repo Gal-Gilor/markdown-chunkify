@@ -66,3 +66,34 @@ class Section(MarkdownContent):
         Text before the first header has no headers and returns an empty string.
         """
         return separator.join([*self.metadata.parents.values(), self.section_header])
+
+
+class OutlineNode(BaseModel):
+    """A header and its content in a document outline, with its nested headers."""
+
+    header: str = Field(
+        ..., description="The header text. Empty for text before the first header"
+    )
+    content: str = Field(..., description="The text under the header, up to the next header")
+    level: int = Field(
+        ...,
+        ge=0,
+        description=(
+            "The level of the header (number of #). 0 for text before the first header."
+        ),
+    )
+    id: int = Field(..., description="The node's position in document order, starting at 0")
+    parent_id: int | None = Field(
+        ..., description="The id of the enclosing node. None for top-level nodes"
+    )
+    span: tuple[int, int] = Field(
+        ...,
+        description=(
+            "The start (inclusive) and end (exclusive) character offsets of the node, "
+            "header line included, in the source text"
+        ),
+    )
+    children: list["OutlineNode"] = Field(
+        default_factory=list,
+        description="The nodes of the headers nested under this header, in document order",
+    )
