@@ -1,9 +1,5 @@
-import dataclasses
-
 import pytest
-from pydantic import ValidationError
 
-from markdown_chunkify.models import SectionMetadata
 from markdown_chunkify.splitter import MarkdownSplitter
 
 splitter = MarkdownSplitter()
@@ -13,16 +9,6 @@ def test_empty_input():
     """Test empty input for split_text."""
     assert splitter.split_text("") == []
     assert splitter.split_text("   ") == []
-
-
-def test_single_header():
-    """Test a single header in a sample markdown text."""
-    text = "# Header\nContent"
-    sections = splitter.split_text(text)
-    assert len(sections) == 1
-    assert sections[0].header == "Header"
-    assert sections[0].content == "Content"
-    assert sections[0].level == 1
 
 
 def test_multiple_headers_same_level():
@@ -77,7 +63,7 @@ def test_ids_are_document_order(sample_markdown):
 
 
 def test_file_operations(tmp_path):
-    # Create a temporary markdown file
+    """split_file reads a Markdown file and splits it."""
     md_file = tmp_path / "test.md"
     md_file.write_text("# Test\nContent")
 
@@ -96,23 +82,6 @@ def test_is_directory(tmp_path):
     """Test if the path is a directory."""
     with pytest.raises(IsADirectoryError):
         splitter.split_file(tmp_path)
-
-
-def test_level_counting():
-    """Test header level counting in a sample markdown text."""
-    text = "### Header"
-    sections = splitter.split_text(text)
-    assert sections[0].level == 3
-
-
-def test_metadata_structure():
-    """Test metadata structure in a sample markdown text."""
-    text = "# H1\n## H2"
-    sections = splitter.split_text(text)
-
-    assert all(isinstance(section.metadata.parents, dict) for section in sections)
-    assert sections[0].metadata.parents == {}
-    assert "h1" in sections[1].metadata.parents
 
 
 def test_to_markdown(sample_markdown):
@@ -145,41 +114,6 @@ def test_breadcrumb_preamble_and_skipped_levels():
     sections = splitter.split_text("Intro\n# A\n### C")
 
     assert [s.breadcrumb() for s in sections] == ["", "A", "A > C"]
-
-
-def test_parents_reject_none():
-    """A None parent header fails validation instead of breaking breadcrumb()."""
-    with pytest.raises(ValidationError):
-        SectionMetadata(id=0, parents={"h1": None}, span=(0, 0))
-
-
-def test_metadata_requires_id():
-    """SectionMetadata fails validation without an id."""
-    with pytest.raises(ValidationError):
-        SectionMetadata(span=(0, 0))
-
-
-def test_models_are_frozen():
-    """Sections and their metadata cannot be changed after creation."""
-    section = splitter.split_text("# A\nText")[0]
-
-    with pytest.raises(ValidationError):
-        section.content = "x"
-    with pytest.raises(ValidationError):
-        section.metadata.id = 1
-
-    changed = section.model_copy(update={"content": "x"})
-    assert (changed.content, section.content) == ("x", "Text")
-
-
-def test_char_count_is_derived_from_span():
-    """char_count is computed from span, serialized, and cannot be set separately."""
-    metadata = SectionMetadata(id=0, span=(2, 9))
-
-    assert metadata.char_count == 7
-    assert metadata.model_dump()["char_count"] == 7
-    assert SectionMetadata.model_validate(metadata.model_dump()) == metadata
-    assert SectionMetadata(id=0, span=(0, 10), char_count=3).char_count == 10
 
 
 def test_code_block_kept_verbatim():
@@ -247,14 +181,6 @@ def test_invalid_max_level(max_level):
     """max_level must be between 1 and 6."""
     with pytest.raises(ValueError, match="max_level must be between 1 and 6"):
         MarkdownSplitter(max_level=max_level)
-
-
-def test_splitter_is_keyword_only_and_frozen():
-    """max_level is keyword-only, and a splitter cannot be changed after creation."""
-    with pytest.raises(TypeError):
-        MarkdownSplitter(3)
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        splitter.max_level = 3
 
 
 def test_skipped_levels():
@@ -588,6 +514,23 @@ def test_front_matter_must_start_with_a_key(text):
         (1, "Title"),
         (2, "Next"),
     ]
+
+
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        (
+            "---\ntitle: Guide\nnot yaml\n# Title\n---\n## Next",
+            [(0, ""), (1, "Title"), (2, "Next")],
+        ),
+        ("---\ntitle: Guide\n# Title", [(0, ""), (1, "Title")]),
+    ],
+)
+def test_front_matter_needs_yaml_lines_and_a_closing_line(text, expected):
+    """'---' blocks with a non-YAML line or without a closing line are not front matter."""
+    sections = splitter.split_text(text)
+
+    assert [(s.level, s.header) for s in sections] == expected
 
 
 def test_span_slices_section_from_source(sample_markdown):

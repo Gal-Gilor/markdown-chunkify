@@ -61,4 +61,5 @@ line-ending = "auto"
 docstring-code-format = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "markdown_chunkify"]
+addopts = "--doctest-modules"
