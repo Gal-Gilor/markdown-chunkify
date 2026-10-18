@@ -308,22 +308,10 @@ class MarkdownSplitter(BaseSplitter):
                 },
             ]
         """
-        return self._build_outline(text, normalize_unicode=False)
+        return self._build_outline(text)
 
-    @staticmethod
-    def _normalize_node(node: dict) -> None:
-        """Transliterate a node's header and content to ASCII, recording if they changed."""
-        header, content = anyascii(node["header"]), anyascii(node["content"])
-        node["normalized"] = header != node["header"] or content != node["content"]
-        node["header"], node["content"] = header, content
-
-    def _build_outline(self, text: str, normalize_unicode: bool) -> list[dict]:
-        """Build the outline described in `get_document_outline`.
-
-        With `normalize_unicode`, each node's header and content are transliterated to
-        ASCII, so the parents of the sections match their headers. Spans stay offsets in
-        the source text.
-        """
+    def _build_outline(self, text: str) -> list[dict]:
+        """Build the outline described in `get_document_outline`."""
         # Spans are offsets in the text as passed in, byte order mark included
         offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
         text = text[offset:]
@@ -333,8 +321,6 @@ class MarkdownSplitter(BaseSplitter):
 
         headers = self._find_headers(text)
         document_outline = []
-        # Nodes in document order. A node's index in this list is its id.
-        nodes = []
 
         preamble_end = headers[0][0] if headers else len(text)
         preamble = self._trim(text[:preamble_end])
@@ -351,8 +337,9 @@ class MarkdownSplitter(BaseSplitter):
                     "span": (preamble_start, preamble_start + len(preamble)),
                 }
             )
-            nodes.append(document_outline[0])
 
+        # Ids are in document order, so the headers follow the preamble's id
+        first_id = len(document_outline)
         # Nodes on the path from the top level to the current header
         node_stack = []
 
@@ -368,23 +355,21 @@ class MarkdownSplitter(BaseSplitter):
                 "content": self._trim(text[content_start:content_end]),
                 "level": level,
                 "children": [],
-                "id": len(nodes),
+                "id": first_id + i,
                 "parent_id": node_stack[-1]["id"] if node_stack else None,
                 "span": (offset + line_start, offset + span_end),
             }
             parent_children = node_stack[-1]["children"] if node_stack else document_outline
             parent_children.append(node)
             node_stack.append(node)
-            nodes.append(node)
-
-        if normalize_unicode:
-            for node in nodes:
-                self._normalize_node(node)
 
         return document_outline
 
     def _create_sections_from_outline(
-        self, outline: list[dict], parent_headers: dict[str, str] | None = None
+        self,
+        outline: list[dict],
+        normalize_unicode: bool,
+        parent_headers: dict[str, str] | None = None,
     ) -> list[Section]:
         """Convert a document outline into a flat list of Section objects.
 
@@ -393,6 +378,9 @@ class MarkdownSplitter(BaseSplitter):
 
         Args:
             outline (list[dict]): Nodes as returned by `get_document_outline`.
+            normalize_unicode (bool): Transliterate each header and content to ASCII.
+                The parents use the transliterated headers, and spans stay offsets in
+                the source text.
             parent_headers (dict[str, str] | None): A dictionary mapping the levels of the
                 ancestor headers to their text. Keys are in the format 'h1', 'h2', etc.
                 Defaults to None, which means the nodes have no ancestors.
@@ -409,24 +397,30 @@ class MarkdownSplitter(BaseSplitter):
         sections = []
 
         for node in outline:
+            header, content = node["header"], node["content"]
+            if normalize_unicode:
+                header, content = anyascii(header), anyascii(content)
+
             sections.append(
                 Section(
-                    section_header=node["header"],
-                    section_text=node["content"],
+                    section_header=header,
+                    section_text=content,
                     header_level=node["level"],
                     metadata=SectionMetadata(
                         id=node["id"],
                         parent_id=node["parent_id"],
                         parents=dict(parent_headers),
-                        normalized=node.get("normalized", False),
+                        normalized=header != node["header"] or content != node["content"],
                         span=node["span"],
                     ),
                 )
             )
 
-            child_parents = {**parent_headers, f"h{node['level']}": node["header"]}
+            child_parents = {**parent_headers, f"h{node['level']}": header}
             sections.extend(
-                self._create_sections_from_outline(node["children"], child_parents)
+                self._create_sections_from_outline(
+                    node["children"], normalize_unicode, child_parents
+                )
             )
 
         return sections
@@ -485,8 +479,8 @@ class MarkdownSplitter(BaseSplitter):
             >>> sections[2].metadata.parent_id
             0
         """
-        outline = self._build_outline(text, normalize_unicode)
-        sections = self._create_sections_from_outline(outline)
+        outline = self._build_outline(text)
+        sections = self._create_sections_from_outline(outline, normalize_unicode)
 
         logger.info(f"Successfully split the Markdown into {len(sections)} sections.")
         return sections
