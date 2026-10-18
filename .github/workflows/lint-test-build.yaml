@@ -1,4 +1,4 @@
-name: Execute Tests
+name: Lint, test and build
 
 # Lint, test and build the package on pushes and pull requests to the main branch.
 # Only GitHub-owned actions are used; uv is installed with pip.
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.12", "3.13"]
+        python-version: ["3.12", "3.13", "3.14"]
 
     steps:
       - name: Checkout

@@ -1,4 +1,4 @@
-[![Execute Tests](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/execute_main_tests.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/execute_main_tests.yaml)
+[![Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml)
 
 # MarkdownSplitter
 
@@ -38,7 +38,7 @@ uv run ruff check .
 uv run ruff format .
 ```
 
-The [Execute Tests](.github/workflows/execute_main_tests.yaml) workflow runs Ruff, the tests on Python 3.12 and 3.13, and a wheel build on pushes and pull requests to `main`.
+The [Lint, test and build](.github/workflows/lint-test-build.yaml) workflow runs Ruff, the tests on Python 3.12, 3.13 and 3.14, and a wheel build on pushes and pull requests to `main`.
 
 ## Usage
 

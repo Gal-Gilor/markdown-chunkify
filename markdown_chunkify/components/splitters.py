@@ -1,10 +1,6 @@
 import logging
 import re
 from pathlib import Path
-from typing import Dict
-from typing import List
-from typing import Optional
-from typing import Union
 
 from anyascii import anyascii
 
@@ -140,7 +136,7 @@ class MarkdownSplitter(BaseSplitter):
         )
 
     @staticmethod
-    def _front_matter_line_count(lines: List[str]) -> int:
+    def _front_matter_line_count(lines: list[str]) -> int:
         """Count the lines of YAML front matter at the start of the document.
 
         Front matter starts with a '---' line followed by a 'key:' line, ends with a '---'
@@ -162,7 +158,7 @@ class MarkdownSplitter(BaseSplitter):
 
         return 0
 
-    def _find_headers(self, text: str) -> List[tuple[int, int, int, str]]:
+    def _find_headers(self, text: str) -> list[tuple[int, int, int, str]]:
         """Find the headers outside fenced code blocks, HTML blocks and front matter.
 
         HTML blocks are HTML comments and <pre>, <script>, <style> and <textarea>
@@ -170,7 +166,7 @@ class MarkdownSplitter(BaseSplitter):
         warning is logged because the headers after it are treated as text.
 
         Returns:
-            List[tuple[int, int, int, str]]: For each header, the offset where its line
+            list[tuple[int, int, int, str]]: For each header, the offset where its line
                 starts, the offset where its line ends, its level and its text.
         """
         headers = []
@@ -242,7 +238,7 @@ class MarkdownSplitter(BaseSplitter):
         """Remove leading blank lines and trailing whitespace, keeping indentation."""
         return _LEADING_BLANK_LINES_PATTERN.sub("", text).rstrip()
 
-    def get_document_outline(self, text: str) -> List[Dict]:
+    def get_document_outline(self, text: str) -> list[dict]:
         """Generate a nested document outline with the header hierarchy.
 
         Processes a Markdown document and creates a hierarchical structure that
@@ -254,11 +250,11 @@ class MarkdownSplitter(BaseSplitter):
                        (e.g., "# Header 1", "## Header 2", etc.).
 
         Returns:
-            List[Dict]: The top-level nodes in document order. Each node contains:
+            list[dict]: The top-level nodes in document order. Each node contains:
                 - header (str): The header text
                 - content (str): The text under the header, up to the next header
                 - level (int): The header level (1 for H1, 2 for H2, etc.)
-                - children (List[Dict]): Nested headers under this header
+                - children (list[dict]): Nested headers under this header
                 - id (int): The node's position in document order, starting at 0
                 - parent_id (int | None): The id of the enclosing node. None for top-level
                   nodes
@@ -315,13 +311,13 @@ class MarkdownSplitter(BaseSplitter):
         return self._build_outline(text, normalize_unicode=False)
 
     @staticmethod
-    def _normalize_node(node: Dict) -> None:
+    def _normalize_node(node: dict) -> None:
         """Transliterate a node's header and content to ASCII, recording if they changed."""
         header, content = anyascii(node["header"]), anyascii(node["content"])
         node["normalized"] = header != node["header"] or content != node["content"]
         node["header"], node["content"] = header, content
 
-    def _build_outline(self, text: str, normalize_unicode: bool) -> List[Dict]:
+    def _build_outline(self, text: str, normalize_unicode: bool) -> list[dict]:
         """Build the outline described in `get_document_outline`.
 
         With `normalize_unicode`, each node's header and content are transliterated to
@@ -388,21 +384,21 @@ class MarkdownSplitter(BaseSplitter):
         return document_outline
 
     def _create_sections_from_outline(
-        self, outline: List[Dict], parent_headers: Optional[Dict[str, str]] = None
-    ) -> List[Section]:
+        self, outline: list[dict], parent_headers: dict[str, str] | None = None
+    ) -> list[Section]:
         """Convert a document outline into a flat list of Section objects.
 
         Traverses the hierarchical document outline in document order and creates Section
         objects that keep the parent-child relationships.
 
         Args:
-            outline (List[Dict]): Nodes as returned by `get_document_outline`.
-            parent_headers (Dict[str, str], optional): A dictionary mapping the levels of the
+            outline (list[dict]): Nodes as returned by `get_document_outline`.
+            parent_headers (dict[str, str] | None): A dictionary mapping the levels of the
                 ancestor headers to their text. Keys are in the format 'h1', 'h2', etc.
                 Defaults to None, which means the nodes have no ancestors.
 
         Returns:
-            List[Section]: A flat list of Section objects, each containing:
+            list[Section]: A flat list of Section objects, each containing:
                 - section_header (str): The header text
                 - section_text (str): The content under the header
                 - header_level (int): The level of the header
@@ -436,7 +432,7 @@ class MarkdownSplitter(BaseSplitter):
 
         return sections
 
-    def split_text(self, text: str, normalize_unicode: bool = False) -> List[Section]:
+    def split_text(self, text: str, normalize_unicode: bool = False) -> list[Section]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Processes a Markdown document and splits it into sections based on
@@ -455,7 +451,7 @@ class MarkdownSplitter(BaseSplitter):
                 offsets in `text`. Defaults to False.
 
         Returns:
-            List[Section]: A list of Section objects in document order, each containing:
+            list[Section]: A list of Section objects in document order, each containing:
                 - section_header (str): The header text without '#' markers
                 - section_text (str): The content between this header and the next
                 - header_level (int): The level of the header (1 for H1, 2 for H2, etc.)
@@ -463,7 +459,7 @@ class MarkdownSplitter(BaseSplitter):
                     - id (int): The section's index in the returned list
                     - parent_id (int | None): The id of the enclosing section, or None for
                       top-level sections
-                    - parents (Dict[str, str]): Parent headers by level
+                    - parents (dict[str, str]): Parent headers by level
                     - span (tuple[int, int]): The start and end offsets of the header line
                       and section text in `text`, so `text[start:end]` is the section as
                       written
@@ -501,10 +497,10 @@ class MarkdownSplitter(BaseSplitter):
 
     def split_file(
         self,
-        filepath: Union[str, Path],
+        filepath: str | Path,
         encoding: str = "utf-8-sig",
         normalize_unicode: bool = False,
-    ) -> List[Section]:
+    ) -> list[Section]:
         """Split a Markdown file into sections, as `split_text` does.
 
         Args:
