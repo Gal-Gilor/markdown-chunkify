@@ -1,6 +1,6 @@
 [![Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml)
 
-# MarkdownSplitter
+# markdown-chunkify
 
 A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, links each section to its parent section, can transliterate Unicode to ASCII, and can optionally convert PDFs to Markdown.
 
@@ -18,27 +18,15 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 ## Installation
 
 ```bash
-pip install "markdown-chunkify @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
+pip install markdown-chunkify
 ```
 
 The splitter depends on Pydantic and [anyascii](https://github.com/anyascii/anyascii). Install the `pdf` extra for the PDF parser:
 ```bash
-pip install "markdown-chunkify[pdf] @ git+https://github.com/Gal-Gilor/markdown-chunkify.git"
+pip install "markdown-chunkify[pdf]"
 ```
 
 The `pdf` extra installs [PyMuPDF](https://github.com/pymupdf/PyMuPDF) through `pymupdf4llm`. PyMuPDF is licensed under the AGPL-3.0 or an Artifex commercial license, unlike this package's Apache-2.0 license.
-
-For Development Setup (requires [uv](https://docs.astral.sh/uv/)):
-```bash
-git clone https://github.com/Gal-Gilor/markdown-chunkify.git
-cd markdown-chunkify
-uv sync --all-extras
-uv run pytest -vv
-uv run ruff check .
-uv run ruff format .
-```
-
-The [Lint, test and build](.github/workflows/lint-test-build.yaml) workflow runs Ruff, the tests on Python 3.12, 3.13 and 3.14, and a wheel build on pushes and pull requests to `main`.
 
 ## Usage
 
@@ -138,14 +126,18 @@ from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
 
-**MarkdownContent:** The base data structure representing a Markdown section. It contains the header and content of a section and is the base class of the `Section` model.
+### MarkdownContent
+
+The base class of `Section`. It holds a section's header and text.
 ```python
 class MarkdownContent(BaseModel):
     section_header: str  # The header of the section (without #)
     section_text: str  # The content of the section
 ```
 
-**Section:** The primary data structure representing a Markdown section. It contains the header level, metadata, and content of a section.
+### Section
+
+A section returned by `split_text` and `split_file`. It adds the header level and metadata to `MarkdownContent`.
 ```python
 class Section(MarkdownContent):
     # Number of # symbols (1-6), 0 for text before the first header
@@ -160,7 +152,9 @@ class Section(MarkdownContent):
     def breadcrumb(self, separator: str = " > ") -> str: ...
 ```
 
-**SectionMetadata:** A Section's metadata: its id, its parent's id, its parent headers, whether Unicode normalization changed it, and where it is in the source text.
+### SectionMetadata
+
+A section's id, its parent's id, its parent headers, whether Unicode normalization changed it, and where it is in the source text.
 ```python
 class SectionMetadata(BaseModel):
     # Position in document order, starting at 0
@@ -179,13 +173,32 @@ class SectionMetadata(BaseModel):
 
 The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written. A normalized section keeps the span and character count of the source text, so `text[start:end]` returns the text before transliteration.
 
-### Methods
-
-- `to_markdown()`: Convert to Markdown format
-- `breadcrumb(separator=" > ")`: Join the parent headers and the section's own header
-
 ## Requirements
-- Python 3.12+
+
+Python 3.12 or later.
+
+## Contributing
+
+Report bugs and request features in [GitHub issues](https://github.com/Gal-Gilor/markdown-chunkify/issues). For a large change, open an issue to discuss it before you start.
+
+Set up a development environment with [uv](https://docs.astral.sh/uv/):
+```bash
+git clone https://github.com/Gal-Gilor/markdown-chunkify.git
+cd markdown-chunkify
+uv sync --all-extras
+```
+
+Run the tests and Ruff before opening a pull request:
+```bash
+uv run pytest -vv
+uv run ruff check .
+uv run ruff format .
+```
+
+Open pull requests against `main`. The [Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/blob/main/.github/workflows/lint-test-build.yaml) workflow runs Ruff, the tests on Python 3.12, 3.13 and 3.14, and a wheel build on each pull request. Add tests for changed behavior, and add user-facing changes to [CHANGELOG.md](https://github.com/Gal-Gilor/markdown-chunkify/blob/main/CHANGELOG.md).
+
+To release a version, update `version` in `pyproject.toml` and the changelog, then publish a GitHub release tagged `v<version>`, such as `v0.3.0`. The [Release](https://github.com/Gal-Gilor/markdown-chunkify/blob/main/.github/workflows/release.yaml) workflow builds the package and publishes it to PyPI with trusted publishing.
 
 ## License
-Apache License 2.0 - See [LICENSE](LICENSE)
+
+Apache License 2.0. See [LICENSE](https://github.com/Gal-Gilor/markdown-chunkify/blob/main/LICENSE).
