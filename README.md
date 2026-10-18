@@ -7,7 +7,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 ## Features
 
 - Lines inside fenced code blocks (```` ``` ```` or `~~~`, including fences in list items), HTML comment blocks, `<pre>`, `<script>`, `<style>` and `<textarea>` blocks and YAML front matter are never treated as headers. Section text keeps them exactly as written
-- Splits on headers from H1 to H6. `split_text(text, max_level=3)` keeps deeper headers as text of the enclosing section
+- Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
 - Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
@@ -24,28 +24,25 @@ The splitter depends on Pydantic.
 ## Usage
 
 ```python
-from markdown_chunkify import get_document_outline
-from markdown_chunkify import split_file
-from markdown_chunkify import split_text
+from markdown_chunkify import MarkdownSplitter
+
+splitter = MarkdownSplitter()
 
 # Split from text
-sections = split_text(markdown_text)
+sections = splitter.split_text(markdown_text)
 
 # Split from file
-sections = split_file("document.md")
-
-# Nested outline of OutlineNode models instead of a flat list
-outline = get_document_outline(markdown_text)
-outline[0].children  # The nodes nested under the first node
-[node.model_dump() for node in outline]  # The outline as nested dicts
+sections = splitter.split_file("document.md")
 ```
+
+`MarkdownSplitter` is immutable, so one instance can be reused.
 
 ### Section ids and parents
 
 `metadata.id` is the section's position in document order, starting at 0, so `sections[i].metadata.id == i`. `metadata.parent_id` is the id of the enclosing section, or `None` for top-level sections and text before the first header.
 ```python
 text = "# Docker\n## Installation\n## Usage\n# Kubernetes"
-sections = split_text(text)
+sections = MarkdownSplitter().split_text(text)
 
 [(s.header, s.metadata.id, s.metadata.parent_id) for s in sections]
 # [('Docker', 0, None), ('Installation', 1, 0), ('Usage', 2, 0), ('Kubernetes', 3, None)]
@@ -65,7 +62,7 @@ Ids are unique within one document. To use them across documents, combine them w
 `section.breadcrumb()` joins the parent headers and the section's own header. Sent with the section text, it tells an embedding model or LLM what the section is about when the text itself says "it" or "this step".
 ```python
 text = "# Docker\n## Installation\nRun the installer."
-section = split_text(text)[1]
+section = MarkdownSplitter().split_text(text)[1]
 
 section.breadcrumb()  # 'Docker > Installation'
 section.breadcrumb(separator=" / ")  # 'Docker / Installation'
@@ -87,9 +84,8 @@ Text before the first header returns an empty string. The breadcrumb is computed
 
 ## Data Models
 
-`Section`, `SectionMetadata` and `OutlineNode` are exported from the package root:
+`Section` and `SectionMetadata` are exported from the package root:
 ```python
-from markdown_chunkify import OutlineNode
 from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
@@ -98,7 +94,7 @@ The models are frozen, so to change a section, call `section.model_copy(update={
 
 ### Section
 
-A section returned by `split_text` and `split_file`. It holds the section's header, text, header level and metadata.
+A section returned by the `split_text` and `split_file` methods. It holds the section's header, text, header level and metadata.
 ```python
 class Section(BaseModel):
     model_config = ConfigDict(frozen=True)
@@ -139,29 +135,6 @@ class SectionMetadata(BaseModel):
 ```
 
 The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written.
-
-### OutlineNode
-
-A node of the outline returned by `get_document_outline`. It holds a header, its content and the nodes nested under it.
-```python
-class OutlineNode(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    # The header text, empty for text before the first header
-    header: str
-    # The text under the header, up to the next header
-    content: str
-    # Number of # symbols (1-6), 0 for text before the first header
-    level: int
-    # Position in document order, starting at 0, the same as the section's id
-    id: int
-    # Id of the enclosing node, None for top-level nodes
-    parent_id: int | None
-    # Start (inclusive) and end (exclusive) offsets in the source text
-    span: tuple[int, int]
-    # Nodes of the headers nested under this header
-    children: list[OutlineNode]
-```
 
 ## Requirements
 
