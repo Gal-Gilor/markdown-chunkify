@@ -420,7 +420,6 @@ class MarkdownSplitter(BaseSplitter):
                         parents=dict(parent_headers),
                         normalized=node.get("normalized", False),
                         span=node["span"],
-                        char_count=node["span"][1] - node["span"][0],
                     ),
                 )
             )
@@ -463,7 +462,8 @@ class MarkdownSplitter(BaseSplitter):
                     - span (tuple[int, int]): The start and end offsets of the header line
                       and section text in `text`, so `text[start:end]` is the section as
                       written
-                    - char_count (int): The number of characters in the span
+                    - char_count (int): The number of characters in the span, computed
+                      from it
                     - normalized (bool): Whether normalization changed the header or text
                 Text before the first header, or a document without headers, is returned
                 as a section with level 0 and an empty header.

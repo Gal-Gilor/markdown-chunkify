@@ -163,7 +163,17 @@ def test_breadcrumb_follows_normalization(splitter):
 def test_parents_reject_none():
     """A None parent header fails validation instead of breaking breadcrumb()."""
     with pytest.raises(ValidationError):
-        SectionMetadata(parents={"h1": None})
+        SectionMetadata(parents={"h1": None}, span=(0, 0))
+
+
+def test_char_count_is_derived_from_span():
+    """char_count is computed from span, serialized, and cannot be set separately."""
+    metadata = SectionMetadata(span=(2, 9))
+
+    assert metadata.char_count == 7
+    assert metadata.model_dump()["char_count"] == 7
+    assert SectionMetadata.model_validate(metadata.model_dump()) == metadata
+    assert SectionMetadata(span=(0, 10), char_count=3).char_count == 10
 
 
 def test_code_block_kept_verbatim(splitter):
