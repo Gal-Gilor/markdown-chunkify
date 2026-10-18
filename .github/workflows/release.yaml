@@ -27,6 +27,12 @@ jobs:
       - name: Check the tag matches the package version
         run: test "${GITHUB_REF_NAME#v}" = "$(uv version --short)"
 
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run Pytests
+        run: uv run pytest
+
       - name: Build the sdist and wheel
         run: uv build
 
