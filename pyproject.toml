@@ -3,7 +3,7 @@ name = "markdown-chunkify"
 version = "0.3.0"
 description = "Split Markdown documents into hierarchical sections."
 authors = [
-    {name = "Gal Gilor", email = "gilorgal2010@gmail.com"}
+    {name = "Gal Gilor"}
 ]
 readme = "README.md"
 license = "Apache-2.0"
