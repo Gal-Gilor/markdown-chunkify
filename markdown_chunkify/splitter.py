@@ -44,7 +44,7 @@ Example:
     ... ## Usage
     ... Basic usage examples...
     ... '''
-    >>> sections = split_text(text)
+    >>> sections = MarkdownSplitter().split_text(text)
     >>> for section in sections:
     ...     print(f"Header: {section.header}")
     ...     print(f"Level: {section.level}")
@@ -216,100 +216,6 @@ def _trim(text: str) -> str:
     return _LEADING_BLANK_LINES_PATTERN.sub("", text).rstrip()
 
 
-def get_document_outline(
-    text: str, *, max_level: int = MAX_HEADER_LEVEL
-) -> list[OutlineNode]:
-    """Generate a nested document outline with the header hierarchy.
-
-    Processes a Markdown document and creates a hierarchical structure that
-    captures the relationships between headers and their content. Headers with the
-    same text are kept as separate nodes.
-
-    Args:
-        text (str): The Markdown text to process. Should contain headers marked with '#'
-                   (e.g., "# Header 1", "## Header 2", etc.).
-        max_level (int): The deepest header level to split on (1-6). Deeper headers
-            are kept as text of the enclosing section.
-
-    Returns:
-        list[OutlineNode]: The top-level nodes in document order. Each node holds a
-            header and its content, level, id, parent id and span, and the nodes of
-            the headers nested under it in `children`. Text before the first header
-            is the first node, with level 0 and an empty header.
-
-    Raises:
-        ValueError: If `max_level` is not between 1 and 6.
-
-    Example:
-        >>> text = '''
-        ... # Header 1
-        ... Content 1
-        ... ## SubHeader A
-        ... Content A
-        ... # Header 2
-        ... Content 2
-        ... '''
-        >>> outline = get_document_outline(text)
-        >>> [(node.header, node.id) for node in outline]
-        [('Header 1', 0), ('Header 2', 2)]
-        >>> child = outline[0].children[0]
-        >>> child.header, child.content, child.parent_id, child.span
-        ('SubHeader A', 'Content A', 0, (22, 46))
-    """
-    if not 1 <= max_level <= MAX_HEADER_LEVEL:
-        raise ValueError(f"max_level must be between 1 and {MAX_HEADER_LEVEL}.")
-
-    # Spans are offsets in the text as passed in, byte order mark included
-    offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
-    text = text[offset:]
-    if not text.strip():
-        return []
-
-    headers = _find_headers(text, max_level)
-    document_outline = []
-
-    preamble_end = headers[0][0] if headers else len(text)
-    preamble = _trim(text[:preamble_end])
-    if preamble:
-        preamble_start = offset + text.index(preamble, 0, preamble_end)
-        document_outline.append(
-            OutlineNode(
-                header="",
-                content=preamble,
-                level=0,
-                id=0,
-                parent_id=None,
-                span=(preamble_start, preamble_start + len(preamble)),
-            )
-        )
-
-    # Ids are in document order, so the headers follow the preamble's id
-    first_id = len(document_outline)
-    # Nodes on the path from the top level to the current header
-    node_stack = []
-
-    for i, (line_start, content_start, level, header_text) in enumerate(headers):
-        content_end = headers[i + 1][0] if i + 1 < len(headers) else len(text)
-        span_end = line_start + len(text[line_start:content_end].rstrip())
-
-        while node_stack and node_stack[-1].level >= level:
-            node_stack.pop()
-
-        node = OutlineNode(
-            header=header_text,
-            content=_trim(text[content_start:content_end]),
-            level=level,
-            id=first_id + i,
-            parent_id=node_stack[-1].id if node_stack else None,
-            span=(offset + line_start, offset + span_end),
-        )
-        parent_children = node_stack[-1].children if node_stack else document_outline
-        parent_children.append(node)
-        node_stack.append(node)
-
-    return document_outline
-
-
 def _create_sections_from_outline(
     outline: list[OutlineNode],
     parent_headers: dict[str, str] | None = None,
@@ -320,7 +226,8 @@ def _create_sections_from_outline(
     objects that keep the parent-child relationships.
 
     Args:
-        outline (list[OutlineNode]): Nodes as returned by `get_document_outline`.
+        outline (list[OutlineNode]): Nodes as returned by
+            `MarkdownSplitter.get_document_outline`.
         parent_headers (dict[str, str] | None): A dictionary mapping the levels of the
             ancestor headers to their text. Keys are in the format 'h1', 'h2', etc.
             Defaults to None, which means the nodes have no ancestors.
@@ -357,75 +264,168 @@ def _create_sections_from_outline(
     return sections
 
 
-def split_text(text: str, *, max_level: int = MAX_HEADER_LEVEL) -> list[Section]:
-    """Split Markdown text into sections while maintaining header hierarchy.
+class MarkdownSplitter:
+    """Split Markdown documents into sections based on header hierarchy."""
 
-    Processes a Markdown document and splits it into sections based on
-    headers. Each section records its id and its parent's id, so the hierarchy can be
-    rebuilt: a section's children are the sections whose `parent_id` is its `id`, and
-    sections with the same `parent_id` are siblings, whatever their header levels.
-    Lines inside fenced code blocks are not treated as headers.
+    def __init__(self, *, max_level: int = MAX_HEADER_LEVEL) -> None:
+        """Initialize the splitter.
 
-    Args:
-        text (str): The Markdown text to split. Should contain headers marked with '#'
-                   followed by a space (e.g., "# Header 1", "## Header 2").
-        max_level (int): The deepest header level to split on (1-6). Deeper headers
-            are kept as text of the enclosing section.
+        Args:
+            max_level (int): The deepest header level to split on (1-6). Deeper headers
+                are kept as text of the enclosing section.
 
-    Returns:
-        list[Section]: A list of Section objects in document order, each containing:
-            - header (str): The header text without '#' markers
-            - content (str): The content between this header and the next
-            - level (int): The level of the header (1 for H1, 2 for H2, etc.)
-            - metadata (SectionMetadata): Contains:
-                - id (int): The section's index in the returned list
-                - parent_id (int | None): The id of the enclosing section, or None for
-                  top-level sections
-                - parents (dict[str, str]): Parent headers by level
-                - span (tuple[int, int]): The start and end offsets of the header line
-                  and section text in `text`, so `text[start:end]` is the section as
-                  written
-                - char_count (int): The number of characters in the span, computed
-                  from it
-            Text before the first header, or a document without headers, is returned
-            as a section with level 0 and an empty header.
+        Raises:
+            ValueError: If `max_level` is not between 1 and 6.
+        """
+        if not 1 <= max_level <= MAX_HEADER_LEVEL:
+            raise ValueError(f"max_level must be between 1 and {MAX_HEADER_LEVEL}.")
+        self.max_level = max_level
 
-    Example:
-        >>> text = '''
-        ... # Main Topic
-        ... Introduction text
-        ... ## Sub Topic A
-        ... Content A
-        ... ## Sub Topic B
-        ... Content B
-        ... '''
-        >>> sections = split_text(text)
-        >>> sections[0].header
-        'Main Topic'
-        >>> sections[1].metadata.parents
-        {'h1': 'Main Topic'}
-        >>> sections[2].metadata.parent_id
-        0
-    """
-    outline = get_document_outline(text, max_level=max_level)
-    return _create_sections_from_outline(outline)
+    def get_document_outline(self, text: str) -> list[OutlineNode]:
+        """Generate a nested document outline with the header hierarchy.
 
+        Processes a Markdown document and creates a hierarchical structure that
+        captures the relationships between headers and their content. Headers with the
+        same text are kept as separate nodes.
 
-def split_file(
-    path: str | Path, *, max_level: int = MAX_HEADER_LEVEL, encoding: str = "utf-8"
-) -> list[Section]:
-    """Split a Markdown file into sections, as `split_text` does.
+        Args:
+            text (str): The Markdown text to process. Should contain headers marked with '#'
+                       (e.g., "# Header 1", "## Header 2", etc.).
 
-    Spans are character offsets into the file's contents as decoded with
-    `encoding`, with line endings kept as written.
+        Returns:
+            list[OutlineNode]: The top-level nodes in document order. Each node holds a
+                header and its content, level, id, parent id and span, and the nodes of
+                the headers nested under it in `children`. Text before the first header
+                is the first node, with level 0 and an empty header.
 
-    Args:
-        path (str | Path): The path to the Markdown file.
-        max_level (int): The deepest header level to split on (1-6). Deeper headers
-            are kept as text of the enclosing section.
-        encoding (str): The file encoding. The default, 'utf-8', keeps a byte
-            order mark in the text, and spans count it. Passing 'utf-8-sig'
-            removes it before splitting, so offsets start after it.
-    """
-    with open(path, encoding=encoding, newline="") as f:
-        return split_text(f.read(), max_level=max_level)
+        Example:
+            >>> text = '''
+            ... # Header 1
+            ... Content 1
+            ... ## SubHeader A
+            ... Content A
+            ... # Header 2
+            ... Content 2
+            ... '''
+            >>> outline = MarkdownSplitter().get_document_outline(text)
+            >>> [(node.header, node.id) for node in outline]
+            [('Header 1', 0), ('Header 2', 2)]
+            >>> child = outline[0].children[0]
+            >>> child.header, child.content, child.parent_id, child.span
+            ('SubHeader A', 'Content A', 0, (22, 46))
+        """
+        # Spans are offsets in the text as passed in, byte order mark included
+        offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
+        text = text[offset:]
+        if not text.strip():
+            return []
+
+        headers = _find_headers(text, self.max_level)
+        document_outline = []
+
+        preamble_end = headers[0][0] if headers else len(text)
+        preamble = _trim(text[:preamble_end])
+        if preamble:
+            preamble_start = offset + text.index(preamble, 0, preamble_end)
+            document_outline.append(
+                OutlineNode(
+                    header="",
+                    content=preamble,
+                    level=0,
+                    id=0,
+                    parent_id=None,
+                    span=(preamble_start, preamble_start + len(preamble)),
+                )
+            )
+
+        # Ids are in document order, so the headers follow the preamble's id
+        first_id = len(document_outline)
+        # Nodes on the path from the top level to the current header
+        node_stack = []
+
+        for i, (line_start, content_start, level, header_text) in enumerate(headers):
+            content_end = headers[i + 1][0] if i + 1 < len(headers) else len(text)
+            span_end = line_start + len(text[line_start:content_end].rstrip())
+
+            while node_stack and node_stack[-1].level >= level:
+                node_stack.pop()
+
+            node = OutlineNode(
+                header=header_text,
+                content=_trim(text[content_start:content_end]),
+                level=level,
+                id=first_id + i,
+                parent_id=node_stack[-1].id if node_stack else None,
+                span=(offset + line_start, offset + span_end),
+            )
+            parent_children = node_stack[-1].children if node_stack else document_outline
+            parent_children.append(node)
+            node_stack.append(node)
+
+        return document_outline
+
+    def split_text(self, text: str) -> list[Section]:
+        """Split Markdown text into sections while maintaining header hierarchy.
+
+        Processes a Markdown document and splits it into sections based on
+        headers. Each section records its id and its parent's id, so the hierarchy can be
+        rebuilt: a section's children are the sections whose `parent_id` is its `id`, and
+        sections with the same `parent_id` are siblings, whatever their header levels.
+        Lines inside fenced code blocks are not treated as headers.
+
+        Args:
+            text (str): The Markdown text to split. Should contain headers marked with '#'
+                       followed by a space (e.g., "# Header 1", "## Header 2").
+
+        Returns:
+            list[Section]: A list of Section objects in document order, each containing:
+                - header (str): The header text without '#' markers
+                - content (str): The content between this header and the next
+                - level (int): The level of the header (1 for H1, 2 for H2, etc.)
+                - metadata (SectionMetadata): Contains:
+                    - id (int): The section's index in the returned list
+                    - parent_id (int | None): The id of the enclosing section, or None for
+                      top-level sections
+                    - parents (dict[str, str]): Parent headers by level
+                    - span (tuple[int, int]): The start and end offsets of the header line
+                      and section text in `text`, so `text[start:end]` is the section as
+                      written
+                    - char_count (int): The number of characters in the span, computed
+                      from it
+                Text before the first header, or a document without headers, is returned
+                as a section with level 0 and an empty header.
+
+        Example:
+            >>> text = '''
+            ... # Main Topic
+            ... Introduction text
+            ... ## Sub Topic A
+            ... Content A
+            ... ## Sub Topic B
+            ... Content B
+            ... '''
+            >>> sections = MarkdownSplitter().split_text(text)
+            >>> sections[0].header
+            'Main Topic'
+            >>> sections[1].metadata.parents
+            {'h1': 'Main Topic'}
+            >>> sections[2].metadata.parent_id
+            0
+        """
+        outline = self.get_document_outline(text)
+        return _create_sections_from_outline(outline)
+
+    def split_file(self, path: str | Path, *, encoding: str = "utf-8") -> list[Section]:
+        """Split a Markdown file into sections, as `split_text` does.
+
+        Spans are character offsets into the file's contents as decoded with
+        `encoding`, with line endings kept as written.
+
+        Args:
+            path (str | Path): The path to the Markdown file.
+            encoding (str): The file encoding. The default, 'utf-8', keeps a byte
+                order mark in the text, and spans count it. Passing 'utf-8-sig'
+                removes it before splitting, so offsets start after it.
+        """
+        with open(path, encoding=encoding, newline="") as f:
+            return self.split_text(f.read())

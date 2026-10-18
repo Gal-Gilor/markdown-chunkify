@@ -81,7 +81,7 @@ jobs:
         run: |
           uv venv /tmp/wheel-check
           uv pip install --python /tmp/wheel-check/bin/python dist/*.whl
-          /tmp/wheel-check/bin/python -c "from markdown_chunkify import split_text; assert split_text('# Café')[0].header == 'Café'"
+          /tmp/wheel-check/bin/python -c "from markdown_chunkify import MarkdownSplitter; assert MarkdownSplitter().split_text('# Café')[0].header == 'Café'"
 
       - name: Test with the lowest supported pydantic
         run: |
