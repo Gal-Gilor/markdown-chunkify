@@ -1,20 +1,16 @@
 from pydantic import BaseModel
+from pydantic import ConfigDict
 from pydantic import Field
 from pydantic import computed_field
-
-
-class MarkdownContent(BaseModel):
-    """Represents a Markdown section with a header and content."""
-
-    section_header: str = Field(..., description="The Markdown section header")
-    section_text: str = Field(..., description="The Markdown section content")
 
 
 class SectionMetadata(BaseModel):
     """Metadata fields for a Markdown section."""
 
-    id: int | None = Field(
-        None, description="The section's position in document order, starting at 0"
+    model_config = ConfigDict(frozen=True)
+
+    id: int = Field(
+        ..., description="The section's position in document order, starting at 0"
     )
     parent_id: int | None = Field(
         None, description="The id of the enclosing section. None for top-level sections"
@@ -38,10 +34,14 @@ class SectionMetadata(BaseModel):
         return self.span[1] - self.span[0]
 
 
-class Section(MarkdownContent):
+class Section(BaseModel):
     """Represents a section in a Markdown document with its header hierarchy."""
 
-    header_level: int = Field(
+    model_config = ConfigDict(frozen=True)
+
+    header: str = Field(..., description="The Markdown section header")
+    content: str = Field(..., description="The Markdown section content")
+    level: int = Field(
         ...,
         ge=0,
         description=(
@@ -52,20 +52,22 @@ class Section(MarkdownContent):
 
     def to_markdown(self) -> str:
         """Convert the section to a Markdown string."""
-        if self.header_level == 0:
-            return self.section_text
-        return f"{'#' * self.header_level} {self.section_header}\n\n{self.section_text}"
+        if self.level == 0:
+            return self.content
+        return f"{'#' * self.level} {self.header}\n\n{self.content}"
 
     def breadcrumb(self, separator: str = " > ") -> str:
         """Join the parent headers and the section's own header, such as 'Docker > Setup'.
 
         Text before the first header has no headers and returns an empty string.
         """
-        return separator.join([*self.metadata.parents.values(), self.section_header])
+        return separator.join([*self.metadata.parents.values(), self.header])
 
 
 class OutlineNode(BaseModel):
     """A header and its content in a document outline, with its nested headers."""
+
+    model_config = ConfigDict(frozen=True)
 
     header: str = Field(
         ..., description="The header text. Empty for text before the first header"

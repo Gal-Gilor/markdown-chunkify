@@ -11,7 +11,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
-- Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written. `metadata.char_count` is the length of that span, not of `section_text` or `to_markdown()`
+- Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written. `metadata.char_count` is the length of that span, not of `content` or `to_markdown()`
 
 ## Installation
 
@@ -47,10 +47,10 @@ outline[0].children  # The nodes nested under the first node
 text = "# Docker\n## Installation\n## Usage\n# Kubernetes"
 sections = split_text(text)
 
-[(s.section_header, s.metadata.id, s.metadata.parent_id) for s in sections]
+[(s.header, s.metadata.id, s.metadata.parent_id) for s in sections]
 # [('Docker', 0, None), ('Installation', 1, 0), ('Usage', 2, 0), ('Kubernetes', 3, None)]
 
-sections[sections[1].metadata.parent_id].section_header  # 'Docker'
+sections[sections[1].metadata.parent_id].header  # 'Docker'
 ```
 
 The other relationships follow from these two fields:
@@ -58,7 +58,7 @@ The other relationships follow from these two fields:
 - Sections with the same `parent_id` are siblings, whatever their header levels. In `# A`, `### C`, `## B`, both C and B are children of A. A skipped level adds no placeholder section.
 - The previous and next sections in reading order have ids `id - 1` and `id + 1`.
 
-Ids are unique within one document. To use them across documents, combine them with your own document key, such as `f"{doc_key}:{section.metadata.id}"`. Ids are positions, not content versions: inserting or removing a section renumbers the sections after it, and editing a section's text keeps its id. To detect changed sections between runs, for example to skip re-extracting entities from unchanged text, hash `section_text`. Changing `max_level` changes the tree and the ids.
+Ids are unique within one document. To use them across documents, combine them with your own document key, such as `f"{doc_key}:{section.metadata.id}"`. Ids are positions, not content versions: inserting or removing a section renumbers the sections after it, and editing a section's text keeps its id. To detect changed sections between runs, for example to skip re-extracting entities from unchanged text, hash `content`. Changing `max_level` changes the tree and the ids.
 
 ### Breadcrumbs
 
@@ -70,7 +70,7 @@ section = split_text(text)[1]
 section.breadcrumb()  # 'Docker > Installation'
 section.breadcrumb(separator=" / ")  # 'Docker / Installation'
 
-prompt_text = f"{section.breadcrumb()}\n\n{section.section_text}"
+prompt_text = f"{section.breadcrumb()}\n\n{section.content}"
 ```
 
 Text before the first header returns an empty string. The breadcrumb is computed from `metadata.parents`, so it is not part of the serialized section.
@@ -94,22 +94,21 @@ from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
 
-### MarkdownContent
-
-The base class of `Section`. It holds a section's header and text.
-```python
-class MarkdownContent(BaseModel):
-    section_header: str  # The header of the section (without #)
-    section_text: str  # The content of the section
-```
+The models are frozen, so to change a section, call `section.model_copy(update={"content": "..."})`, which returns a changed copy.
 
 ### Section
 
-A section returned by `split_text` and `split_file`. It adds the header level and metadata to `MarkdownContent`.
+A section returned by `split_text` and `split_file`. It holds the section's header, text, header level and metadata.
 ```python
-class Section(MarkdownContent):
+class Section(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    # The header of the section (without #), empty for text before the first header
+    header: str
+    # The content of the section
+    content: str
     # Number of # symbols (1-6), 0 for text before the first header
-    header_level: int
+    level: int
     # Hierarchy and position information
     metadata: SectionMetadata
 
@@ -125,8 +124,10 @@ class Section(MarkdownContent):
 A section's id, its parent's id, its parent headers and where it is in the source text.
 ```python
 class SectionMetadata(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     # Position in document order, starting at 0
-    id: int | None
+    id: int
     # Id of the enclosing section, None for top-level sections
     parent_id: int | None
     # Parent headers by level, such as {"h1": "Guide", "h2": "Install"}
@@ -144,6 +145,8 @@ The span starts at the header line and ends at the last non-whitespace character
 A node of the outline returned by `get_document_outline`. It holds a header, its content and the nodes nested under it.
 ```python
 class OutlineNode(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
     # The header text, empty for text before the first header
     header: str
     # The text under the header, up to the next header
