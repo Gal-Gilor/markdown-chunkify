@@ -12,6 +12,12 @@ class MarkdownContent(BaseModel):
 class SectionMetadata(BaseModel):
     """Metadata fields for a Markdown section."""
 
+    id: int | None = Field(
+        None, description="The section's position in document order, starting at 0"
+    )
+    parent_id: int | None = Field(
+        None, description="The id of the enclosing section. None for top-level sections"
+    )
     normalized: bool = Field(
         False,
         description="Whether Unicode normalization changed the section header or text",
@@ -19,10 +25,6 @@ class SectionMetadata(BaseModel):
     parents: dict[str, str | None] = Field(
         default_factory=dict,
         description="Parent headers hierarchy for the section",
-    )
-    siblings: list[str] = Field(
-        default_factory=list,
-        description="List of sibling section headers at the same level with same parent",
     )
     span: tuple[int, int] | None = Field(
         None,
@@ -56,3 +58,10 @@ class Section(MarkdownContent):
         if self.header_level == 0:
             return self.section_text
         return f"{'#' * self.header_level} {self.section_header}\n\n{self.section_text}"
+
+    def breadcrumb(self, separator: str = " > ") -> str:
+        """Join the parent headers and the section's own header, such as 'Docker > Setup'.
+
+        Text before the first header has no headers and returns an empty string.
+        """
+        return separator.join([*self.metadata.parents.values(), self.section_header])

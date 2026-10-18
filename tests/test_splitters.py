@@ -46,10 +46,41 @@ def test_parent_headers(splitter, sample_markdown):
 
 
 def test_sibling_headers(splitter, sample_markdown):
-    """Test sibling headers in a sample markdown text."""
+    """Siblings share a parent_id, and their own children do not change that."""
     sections = splitter.split_text(sample_markdown)
-    assert sections[-3].metadata.siblings == ["Header 2.2"]
-    assert sections[-1].metadata.siblings == ["Header 2.1"]
+    header_2 = sections[2]
+
+    assert header_2.section_header == "Header 2"
+    assert [s.section_header for s in sections if s.metadata.parent_id == 2] == [
+        "Header 2.1",
+        "Header 2.2",
+    ]
+
+
+def test_ids_are_document_order(splitter, sample_markdown):
+    """Each id is the section's index, and each parent comes before its children."""
+    sections = splitter.split_text(sample_markdown)
+
+    assert [s.metadata.id for s in sections] == list(range(len(sections)))
+    assert [s.metadata.parent_id for s in sections] == [None, 0, None, 2, 3, 2]
+    for section in sections:
+        if section.metadata.parent_id is not None:
+            parent = sections[section.metadata.parent_id]
+            assert parent.header_level < section.header_level
+            assert section.metadata.parents[f"h{parent.header_level}"] == (
+                parent.section_header
+            )
+
+
+def test_ids_do_not_depend_on_normalization(splitter):
+    """Normalization changes the text, not the ids."""
+    text = "Préface\n# Café\n## Straße\n# B"
+    normalized = splitter.split_text(text, normalize_unicode=True)
+    source = splitter.split_text(text)
+
+    assert [(s.metadata.id, s.metadata.parent_id) for s in normalized] == [
+        (s.metadata.id, s.metadata.parent_id) for s in source
+    ]
 
 
 def test_file_operations(splitter, tmp_path):
@@ -95,6 +126,36 @@ def test_to_markdown(splitter, sample_markdown):
     """Test to_markdown method in a sample markdown text."""
     sections = splitter.split_text(sample_markdown)
     assert sections[0].to_markdown() == "# Header 1\n\nContent 1"
+
+
+def test_breadcrumb(splitter, nested_markdown):
+    """The breadcrumb joins the parent headers and the section's own header."""
+    sections = splitter.split_text(nested_markdown)
+
+    assert [s.breadcrumb() for s in sections] == [
+        "Main",
+        "Main > Sub",
+        "Main > Sub > Deep",
+        "Main > Sub 2",
+    ]
+    assert sections[2].breadcrumb(separator=" / ") == "Main / Sub / Deep"
+
+
+def test_breadcrumb_preamble_and_skipped_levels(splitter):
+    """The preamble has an empty breadcrumb, and skipped levels add nothing."""
+    sections = splitter.split_text("Intro\n# A\n### C")
+
+    assert [s.breadcrumb() for s in sections] == ["", "A", "A > C"]
+
+
+def test_breadcrumb_follows_normalization(splitter):
+    """The breadcrumb uses the same headers as the section and its parents."""
+    text = "# Café\n## Straße"
+
+    assert splitter.split_text(text)[1].breadcrumb() == "Café > Straße"
+    assert splitter.split_text(text, normalize_unicode=True)[1].breadcrumb() == (
+        "Cafe > Strasse"
+    )
 
 
 def test_code_block_kept_verbatim(splitter):
@@ -165,12 +226,24 @@ def test_invalid_max_level(max_level):
 
 
 def test_skipped_levels(splitter):
-    """A skipped level does not create a parent key for the missing level."""
-    sections = splitter.split_text("# A\n### C\n## B")
+    """Skipped levels add no placeholder sections or parent keys.
 
+    C and B are both children of A, so they are siblings although their levels differ,
+    and each has its own child.
+    """
+    sections = splitter.split_text("# A\n### C\n#### E\n## B\n### D")
+
+    assert [s.section_header for s in sections] == ["A", "C", "E", "B", "D"]
+    assert [s.metadata.parent_id for s in sections] == [None, 0, 1, 0, 3]
     assert sections[1].metadata.parents == {"h1": "A"}
-    assert sections[1].metadata.siblings == []
-    assert sections[2].metadata.siblings == []
+    assert sections[2].metadata.parents == {"h1": "A", "h3": "C"}
+
+
+def test_mixed_levels_at_top_level(splitter):
+    """Headers before any shallower header are top-level, whatever their level."""
+    sections = splitter.split_text("## X\n# Y")
+
+    assert [s.metadata.parent_id for s in sections] == [None, None]
 
 
 def test_duplicate_headers_kept(splitter):
@@ -181,8 +254,7 @@ def test_duplicate_headers_kept(splitter):
         ("Notes", "One"),
         ("Notes", "Two"),
     ]
-    assert sections[1].metadata.siblings == ["Notes"]
-    assert sections[2].metadata.siblings == ["Notes"]
+    assert [(s.metadata.id, s.metadata.parent_id) for s in sections[1:]] == [(1, 0), (2, 0)]
 
 
 def test_duplicate_headers_in_outline(splitter):
@@ -193,12 +265,12 @@ def test_duplicate_headers_in_outline(splitter):
 
 
 def test_siblings_do_not_leak_between_same_named_parents(splitter):
-    """Children of different parents with the same text are not siblings."""
+    """Children of different parents with the same text point to their own parent."""
     sections = splitter.split_text("# A\n## Setup\n### X\n# B\n## Setup\n### Y")
     by_header = {s.section_header: s for s in sections}
 
-    assert by_header["X"].metadata.siblings == []
-    assert by_header["Y"].metadata.siblings == []
+    assert by_header["X"].metadata.parent_id == 1
+    assert by_header["Y"].metadata.parent_id == 4
     assert by_header["Y"].metadata.parents == {"h1": "B", "h2": "Setup"}
 
 
@@ -210,7 +282,8 @@ def test_preamble(splitter):
     assert sections[0].header_level == 0
     assert sections[0].section_text == "Intro text"
     assert sections[0].to_markdown() == "Intro text"
-    assert sections[1].metadata.siblings == []
+    assert (sections[0].metadata.id, sections[0].metadata.parent_id) == (0, None)
+    assert (sections[1].metadata.id, sections[1].metadata.parent_id) == (1, None)
 
 
 def test_no_headers(splitter):
@@ -325,46 +398,22 @@ def test_setext_headers_are_text(splitter):
     assert sections[0].section_text == "Title\n=====\nText"
 
 
-def test_max_siblings_keeps_nearest():
-    """max_siblings keeps the siblings nearest to the section, in document order."""
-    text = "\n".join(f"## H{index}" for index in range(6))
-    sections = MarkdownSplitter(max_siblings=2).split_text(text)
+def test_many_siblings():
+    """Thousands of headers under one parent split, each pointing to the parent."""
+    text = "# Root\n" + "\n".join(f"## H{index}\nText" for index in range(5000))
+    sections = MarkdownSplitter().split_text(text)
 
-    assert sections[0].metadata.siblings == ["H1", "H2"]
-    assert sections[3].metadata.siblings == ["H2", "H4"]
-    assert sections[5].metadata.siblings == ["H3", "H4"]
-
-
-def test_max_siblings_zero():
-    """max_siblings=0 lists no siblings."""
-    sections = MarkdownSplitter(max_siblings=0).split_text("## A\n## B")
-
-    assert [s.metadata.siblings for s in sections] == [[], []]
+    assert len(sections) == 5001
+    assert all(s.metadata.parent_id == 0 for s in sections[1:])
 
 
-def test_invalid_max_siblings():
-    """max_siblings cannot be negative."""
-    with pytest.raises(ValueError):
-        MarkdownSplitter(max_siblings=-1)
+def test_outline_ids(splitter):
+    """Outline nodes carry the same ids and parent ids as the sections."""
+    outline = splitter.get_document_outline("Intro\n# A\n## B\n# C")
 
-
-def test_max_siblings_bounds_large_documents():
-    """With max_siblings, many headers at one level get short sibling lists."""
-    text = "\n".join(f"## H{index}\nText" for index in range(5000))
-    sections = MarkdownSplitter(max_siblings=4).split_text(text)
-
-    assert len(sections) == 5000
-    assert max(len(s.metadata.siblings) for s in sections) == 4
-
-
-def test_split_file_max_siblings(tmp_path):
-    """split_file uses the splitter's max_siblings."""
-    md_file = tmp_path / "test.md"
-    md_file.write_text("## A\n## B\n## C")
-
-    sections = MarkdownSplitter(max_siblings=1).split_file(md_file)
-
-    assert [s.metadata.siblings for s in sections] == [["B"], ["A"], ["B"]]
+    assert [(n["id"], n["parent_id"]) for n in outline] == [(0, None), (1, None), (3, None)]
+    assert (outline[1]["children"][0]["id"], outline[1]["children"][0]["parent_id"]) == (2, 1)
+    assert "siblings" not in outline[1]
 
 
 def test_byte_order_mark_in_text(splitter):
@@ -493,15 +542,22 @@ def test_span_includes_byte_order_mark_offset(splitter):
     assert text[1:13] == "# Title\nText"
 
 
-def test_normalizes_unicode_by_default(splitter):
-    """Headers, text, parents and siblings are transliterated to ASCII."""
-    sections = splitter.split_text("# Café\nnaïve — “quoted”\n## Straße\nx\n## Ñu\ny")
+def test_keeps_source_text_by_default(splitter):
+    """By default, sections keep the source text, including entity names."""
+    sections = splitter.split_text("# Müller GmbH\n北京")
+
+    assert (sections[0].section_header, sections[0].section_text) == ("Müller GmbH", "北京")
+    assert not sections[0].metadata.normalized
+
+
+def test_normalize_unicode_enabled(splitter):
+    """Headers, text and parents are transliterated to ASCII."""
+    text = "# Café\nnaïve — “quoted”\n## Straße\nx\n## Ñu\ny"
+    sections = splitter.split_text(text, normalize_unicode=True)
 
     assert [s.section_header for s in sections] == ["Cafe", "Strasse", "Nu"]
     assert sections[0].section_text == 'naive - "quoted"'
     assert sections[1].metadata.parents == {"h1": "Cafe"}
-    assert sections[1].metadata.siblings == ["Nu"]
-    assert sections[2].metadata.siblings == ["Strasse"]
 
 
 def test_normalize_unicode_disabled(splitter):
@@ -520,8 +576,8 @@ def test_normalize_unicode_disabled(splitter):
 def test_normalized_spans_point_at_source(splitter):
     """Normalization keeps spans and character counts on the source text."""
     text = "Préface\n# Café\nStraße straße\n## B\nb"
-    normalized = splitter.split_text(text)
-    source = splitter.split_text(text, normalize_unicode=False)
+    normalized = splitter.split_text(text, normalize_unicode=True)
+    source = splitter.split_text(text)
 
     assert [s.metadata.span for s in normalized] == [s.metadata.span for s in source]
     assert [s.metadata.char_count for s in normalized] == [
@@ -532,14 +588,15 @@ def test_normalized_spans_point_at_source(splitter):
 
 def test_normalized_flag_marks_changed_sections(splitter):
     """Only sections whose header or text changed are marked as normalized."""
-    sections = splitter.split_text("# Plain\ntext\n# Café\ntext\n# Plain 2\nnaïve")
+    text = "# Plain\ntext\n# Café\ntext\n# Plain 2\nnaïve"
+    sections = splitter.split_text(text, normalize_unicode=True)
 
     assert [s.metadata.normalized for s in sections] == [False, True, True]
 
 
 def test_fullwidth_hash_does_not_become_a_header(splitter):
     """Headers are found before normalization, so a fullwidth '＃' stays text."""
-    sections = splitter.split_text("# Title\n＃ Not a header")
+    sections = splitter.split_text("# Title\n＃ Not a header", normalize_unicode=True)
 
     assert [s.section_header for s in sections] == ["Title"]
     assert sections[0].section_text == "# Not a header"
@@ -554,12 +611,12 @@ def test_outline_keeps_source_text(splitter):
 
 
 def test_split_file_normalize_unicode(splitter, tmp_path):
-    """split_file normalizes by default and passes normalize_unicode through."""
+    """split_file keeps the source text by default and passes normalize_unicode through."""
     md_file = tmp_path / "unicode.md"
     md_file.write_text("# Café\nnaïve", encoding="utf-8")
 
-    normalized = splitter.split_file(md_file)
-    source = splitter.split_file(md_file, normalize_unicode=False)
+    normalized = splitter.split_file(md_file, normalize_unicode=True)
+    source = splitter.split_file(md_file)
 
     assert (normalized[0].section_header, normalized[0].section_text) == ("Cafe", "naive")
     assert (source[0].section_header, source[0].section_text) == ("Café", "naïve")
