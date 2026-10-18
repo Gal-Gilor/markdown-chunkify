@@ -1,4 +1,4 @@
-[![Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml)
+[![Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Gal-Gilor/markdown-chunkify)
 
 # MarkdownSplitter
 
