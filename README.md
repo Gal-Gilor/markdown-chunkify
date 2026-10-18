@@ -10,6 +10,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
 - Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
+- `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
 - Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written, and `metadata.char_count` is its length
 - Keeps the source text by default. `normalize_unicode=True` transliterates headers and text to ASCII (`Café` becomes `Cafe`)
 - Optional extra: PDF to Markdown conversion (`pdf`)
@@ -88,6 +89,21 @@ The other relationships follow from these two fields:
 
 Ids are unique within one document. To use them across documents, combine them with your own document key, such as `f"{doc_key}:{section.metadata.id}"`. Ids are positions, not content versions: inserting or removing a section renumbers the sections after it, and editing a section's text keeps its id. To detect changed sections between runs, for example to skip re-extracting entities from unchanged text, hash `section_text`. Changing `max_level` changes the tree and the ids.
 
+### Breadcrumbs
+
+`section.breadcrumb()` joins the parent headers and the section's own header. Sent with the section text, it tells an embedding model or LLM what the section is about when the text itself says "it" or "this step".
+```python
+text = "# Docker\n## Installation\nRun the installer."
+section = splitter.split_text(text)[1]
+
+section.breadcrumb()  # 'Docker > Installation'
+section.breadcrumb(separator=" / ")  # 'Docker / Installation'
+
+prompt_text = f"{section.breadcrumb()}\n\n{section.section_text}"
+```
+
+Text before the first header returns an empty string. The breadcrumb is computed from `metadata.parents`, so it is not part of the serialized section.
+
 ### Unicode normalization
 
 With `normalize_unicode=True`, `split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents use the transliterated headers. It is off by default.
@@ -137,6 +153,9 @@ class Section(MarkdownContent):
 
     # Convert the section back to Markdown
     def to_markdown(self) -> str: ...
+
+    # Join the parent headers and the section's header, such as "Docker > Installation"
+    def breadcrumb(self, separator: str = " > ") -> str: ...
 ```
 
 **SectionMetadata:** A Section's metadata: its id, its parent's id, its parent headers, whether Unicode normalization changed it, and where it is in the source text.
@@ -161,6 +180,7 @@ The span starts at the header line and ends at the last non-whitespace character
 ### Methods
 
 - `to_markdown()`: Convert to Markdown format
+- `breadcrumb(separator=" > ")`: Join the parent headers and the section's own header
 
 ## Requirements
 - Python 3.12+

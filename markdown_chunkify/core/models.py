@@ -58,3 +58,10 @@ class Section(MarkdownContent):
         if self.header_level == 0:
             return self.section_text
         return f"{'#' * self.header_level} {self.section_header}\n\n{self.section_text}"
+
+    def breadcrumb(self, separator: str = " > ") -> str:
+        """Join the parent headers and the section's own header, such as 'Docker > Setup'.
+
+        Text before the first header has no headers and returns an empty string.
+        """
+        return separator.join([*self.metadata.parents.values(), self.section_header])

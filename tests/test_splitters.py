@@ -128,6 +128,36 @@ def test_to_markdown(splitter, sample_markdown):
     assert sections[0].to_markdown() == "# Header 1\n\nContent 1"
 
 
+def test_breadcrumb(splitter, nested_markdown):
+    """The breadcrumb joins the parent headers and the section's own header."""
+    sections = splitter.split_text(nested_markdown)
+
+    assert [s.breadcrumb() for s in sections] == [
+        "Main",
+        "Main > Sub",
+        "Main > Sub > Deep",
+        "Main > Sub 2",
+    ]
+    assert sections[2].breadcrumb(separator=" / ") == "Main / Sub / Deep"
+
+
+def test_breadcrumb_preamble_and_skipped_levels(splitter):
+    """The preamble has an empty breadcrumb, and skipped levels add nothing."""
+    sections = splitter.split_text("Intro\n# A\n### C")
+
+    assert [s.breadcrumb() for s in sections] == ["", "A", "A > C"]
+
+
+def test_breadcrumb_follows_normalization(splitter):
+    """The breadcrumb uses the same headers as the section and its parents."""
+    text = "# Café\n## Straße"
+
+    assert splitter.split_text(text)[1].breadcrumb() == "Café > Straße"
+    assert splitter.split_text(text, normalize_unicode=True)[1].breadcrumb() == (
+        "Cafe > Strasse"
+    )
+
+
 def test_code_block_kept_verbatim(splitter):
     """Code blocks keep their comments, language tag and line breaks."""
     code_block = "```python\n# A comment, not a header\nx = 1\n```"
