@@ -37,6 +37,17 @@ def test_absolute_pdf_path_saves_in_destination(tmp_path):
     assert not (tmp_path / "pdfs" / "report.pdf.md").exists()
 
 
+@pytest.mark.usefixtures("fake_conversion")
+def test_instance_accepts_path_objects(tmp_path):
+    """An instance accepts Path objects for the PDF and the destination."""
+    pdf_path = tmp_path / "report.pdf"
+    pdf_path.write_bytes(b"")
+
+    parsers.PyMuPDFMParser().to_markdown(pdf_path, destination_path=tmp_path / "out")
+
+    assert (tmp_path / "out" / "report.md").read_text() == "# Title"
+
+
 def test_converts_a_real_pdf(tmp_path):
     """A PDF made with PyMuPDF converts to Markdown with pymupdf4llm."""
     import pymupdf

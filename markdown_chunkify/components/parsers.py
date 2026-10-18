@@ -14,13 +14,16 @@ class PyMuPDFMParser(BaseParser):
 
     @classmethod
     def to_markdown(
-        self, file_path: str, destination_path: str | None = None, **kwargs
+        cls,
+        file_path: str | Path,
+        destination_path: str | Path | None = None,
+        **kwargs,
     ) -> str:
         """Convert PDF file to markdown text.
 
         Args:
-            file_path (str): Path to the PDF file.
-            destination_path (str | None): A directory to save the Markdown file in.
+            file_path (str | Path): Path to the PDF file.
+            destination_path (str | Path | None): A directory to save the Markdown file in.
                 If provided, the Markdown is saved as `<PDF file name>.md` in that
                 directory (for example, `docs/report.pdf` is saved as `report.md`).
                 If the directory does not exist, it will be created.
@@ -29,7 +32,7 @@ class PyMuPDFMParser(BaseParser):
             str: A Markdown representation of the PDF file.
         """
         file_name = Path(file_path)
-        logger.info(f"Starting PDF the Markdown conversion for: {file_name}")
+        logger.info(f"Starting the PDF to Markdown conversion for: {file_name}")
 
         if not Path(file_path).exists():
             error_msg = f"File not found: {file_path}"

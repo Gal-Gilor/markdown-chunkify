@@ -22,7 +22,7 @@ class SectionMetadata(BaseModel):
         False,
         description="Whether Unicode normalization changed the section header or text",
     )
-    parents: dict[str, str | None] = Field(
+    parents: dict[str, str] = Field(
         default_factory=dict,
         description="Parent headers hierarchy for the section",
     )
