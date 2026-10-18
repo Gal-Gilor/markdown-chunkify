@@ -16,6 +16,7 @@ The first release on PyPI.
 - `metadata.parents` is typed `dict[str, str]` instead of `dict[str, str | None]`. ([#17])
 - A header with no text (`#`, `## ##` or only whitespace after the `#`) stays as text of the enclosing section. Before, it became a section with `#` or whitespace as its header. ([#17])
 - `get_document_outline` returns `OutlineNode` models instead of dicts. `OutlineNode` is exported from the package root, and `[node.model_dump() for node in outline]` returns the nodes as dicts. ([#24])
+- Removed `PyMuPDFMParser`, `BaseParser` and the `pdf` extra, which installed pymupdf4llm. Call `pymupdf4llm.to_markdown()` directly to convert a PDF to Markdown. ([#33])
 
 ### Added
 
@@ -24,15 +25,15 @@ The first release on PyPI.
 
 ### Changed
 
-- Raised the minimum versions to pydantic 2.14.1 and pymupdf4llm 1.28.2 (`pdf` extra) and removed the upper bounds. ([#15])
+- Raised the minimum version to pydantic 2.14.1 and removed the upper bound. ([#15])
 
 ### Fixed
 
 - `#` lines inside `<pre>`, `<script>`, `<style>` and `<textarea>` blocks are no longer split as headers. ([#17])
-- `PyMuPDFMParser.to_markdown` accepts a `Path` for `file_path` and `destination_path`, as `BaseParser` declares. ([#17])
 
 [0.3.0]: https://github.com/Gal-Gilor/markdown-chunkify/releases/tag/v0.3.0
 [#15]: https://github.com/Gal-Gilor/markdown-chunkify/pull/15
 [#16]: https://github.com/Gal-Gilor/markdown-chunkify/pull/16
 [#17]: https://github.com/Gal-Gilor/markdown-chunkify/pull/17
 [#24]: https://github.com/Gal-Gilor/markdown-chunkify/pull/24
+[#33]: https://github.com/Gal-Gilor/markdown-chunkify/pull/33

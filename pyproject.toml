@@ -9,7 +9,7 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
-keywords = ["markdown", "chunking", "text-splitter", "rag", "embeddings", "llm", "pdf"]
+keywords = ["markdown", "chunking", "text-splitter", "rag", "embeddings", "llm"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -25,11 +25,6 @@ classifiers = [
 dependencies = [
     "anyascii>=0.3.3",
     "pydantic>=2.14.1",
-]
-
-[project.optional-dependencies]
-pdf = [
-    "pymupdf4llm>=1.28.2",
 ]
 
 [project.urls]

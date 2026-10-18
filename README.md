@@ -2,7 +2,7 @@
 
 # markdown-chunkify
 
-A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, links each section to its parent section, can transliterate Unicode to ASCII, and can optionally convert PDFs to Markdown.
+A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, links each section to its parent section, and can transliterate Unicode to ASCII.
 
 ## Features
 
@@ -13,7 +13,6 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
 - Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written. `metadata.char_count` is the length of that span, not of `section_text` or `to_markdown()`
 - Keeps the source text by default. `normalize_unicode=True` transliterates headers and text to ASCII (`Café` becomes `Cafe`)
-- Optional extra: PDF to Markdown conversion (`pdf`)
 
 ## Installation
 
@@ -21,12 +20,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 pip install markdown-chunkify
 ```
 
-The splitter depends on Pydantic and [anyascii](https://github.com/anyascii/anyascii). Install the `pdf` extra for the PDF parser:
-```bash
-pip install "markdown-chunkify[pdf]"
-```
-
-The `pdf` extra installs [PyMuPDF](https://github.com/pymupdf/PyMuPDF) through `pymupdf4llm`. PyMuPDF is licensed under the AGPL-3.0 or an Artifex commercial license, unlike this package's Apache-2.0 license.
+The splitter depends on Pydantic and [anyascii](https://github.com/anyascii/anyascii).
 
 ## Usage
 
@@ -46,17 +40,6 @@ sections = splitter.split_file("document.md")
 outline = splitter.get_document_outline(markdown_text)
 outline[0].children  # The nodes nested under the first node
 [node.model_dump() for node in outline]  # The outline as nested dicts
-```
-
-Convert a PDF to Markdown (`pdf` extra):
-```python
-from markdown_chunkify import PyMuPDFMParser
-
-# Returns the Markdown and saves it as output/report.md
-markdown_text = PyMuPDFMParser.to_markdown(
-    file_path="docs/report.pdf",
-    destination_path="output",  # Optional
-)
 ```
 
 ### Section ids and parents
@@ -209,7 +192,7 @@ Set up a development environment with [uv](https://docs.astral.sh/uv/):
 ```bash
 git clone https://github.com/Gal-Gilor/markdown-chunkify.git
 cd markdown-chunkify
-uv sync --all-extras
+uv sync
 ```
 
 Run the tests and Ruff before opening a pull request:
