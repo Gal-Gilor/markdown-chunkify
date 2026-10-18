@@ -37,6 +37,7 @@ The first release on PyPI.
 
 - `#` lines inside `<pre>`, `<script>`, `<style>` and `<textarea>` blocks are no longer split as headers. ([#17])
 - `Section.to_markdown()` returns only the header line for a section without content, instead of the header followed by two newlines. ([#44])
+- Header lines with long runs of spaces or tabs are parsed in linear time. Before, a 40,000-character run took about 20 seconds. ([#46])
 
 [0.3.0]: https://github.com/Gal-Gilor/markdown-chunkify/releases/tag/v0.3.0
 [#15]: https://github.com/Gal-Gilor/markdown-chunkify/pull/15
@@ -49,3 +50,4 @@ The first release on PyPI.
 [#40]: https://github.com/Gal-Gilor/markdown-chunkify/pull/40
 [#41]: https://github.com/Gal-Gilor/markdown-chunkify/pull/41
 [#44]: https://github.com/Gal-Gilor/markdown-chunkify/pull/44
+[#46]: https://github.com/Gal-Gilor/markdown-chunkify/pull/46
