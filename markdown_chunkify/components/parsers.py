@@ -32,7 +32,7 @@ class PyMuPDFMParser(BaseParser):
             str: A Markdown representation of the PDF file.
         """
         file_name = Path(file_path)
-        logger.info(f"Starting PDF the Markdown conversion for: {file_name}")
+        logger.info(f"Starting the PDF to Markdown conversion for: {file_name}")
 
         if not Path(file_path).exists():
             error_msg = f"File not found: {file_path}"
