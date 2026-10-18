@@ -7,7 +7,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 ## Features
 
 - Lines inside fenced code blocks (```` ``` ```` or `~~~`, including fences in list items), HTML comment blocks, `<pre>`, `<script>`, `<style>` and `<textarea>` blocks and YAML front matter are never treated as headers. Section text keeps them exactly as written
-- Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
+- Splits on headers from H1 to H6. `split_text(text, max_level=3)` keeps deeper headers as text of the enclosing section
 - Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
@@ -24,19 +24,18 @@ The splitter depends on Pydantic.
 ## Usage
 
 ```python
-from markdown_chunkify import MarkdownSplitter
-
-# Initialize splitter
-splitter = MarkdownSplitter()
+from markdown_chunkify import get_document_outline
+from markdown_chunkify import split_file
+from markdown_chunkify import split_text
 
 # Split from text
-sections = splitter.split_text(markdown_text)
+sections = split_text(markdown_text)
 
 # Split from file
-sections = splitter.split_file("document.md")
+sections = split_file("document.md")
 
 # Nested outline of OutlineNode models instead of a flat list
-outline = splitter.get_document_outline(markdown_text)
+outline = get_document_outline(markdown_text)
 outline[0].children  # The nodes nested under the first node
 [node.model_dump() for node in outline]  # The outline as nested dicts
 ```
@@ -46,7 +45,7 @@ outline[0].children  # The nodes nested under the first node
 `metadata.id` is the section's position in document order, starting at 0, so `sections[i].metadata.id == i`. `metadata.parent_id` is the id of the enclosing section, or `None` for top-level sections and text before the first header.
 ```python
 text = "# Docker\n## Installation\n## Usage\n# Kubernetes"
-sections = splitter.split_text(text)
+sections = split_text(text)
 
 [(s.section_header, s.metadata.id, s.metadata.parent_id) for s in sections]
 # [('Docker', 0, None), ('Installation', 1, 0), ('Usage', 2, 0), ('Kubernetes', 3, None)]
@@ -66,7 +65,7 @@ Ids are unique within one document. To use them across documents, combine them w
 `section.breadcrumb()` joins the parent headers and the section's own header. Sent with the section text, it tells an embedding model or LLM what the section is about when the text itself says "it" or "this step".
 ```python
 text = "# Docker\n## Installation\nRun the installer."
-section = splitter.split_text(text)[1]
+section = split_text(text)[1]
 
 section.breadcrumb()  # 'Docker > Installation'
 section.breadcrumb(separator=" / ")  # 'Docker / Installation'

@@ -2,13 +2,6 @@ from textwrap import dedent
 
 import pytest
 
-from markdown_chunkify.splitter import MarkdownSplitter
-
-
-@pytest.fixture
-def splitter():
-    return MarkdownSplitter()
-
 
 @pytest.fixture
 def sample_markdown():
