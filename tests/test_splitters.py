@@ -508,8 +508,8 @@ def test_byte_order_mark_in_file(splitter, tmp_path):
 def test_split_file_spans_index_file_contents(splitter, tmp_path):
     """split_file spans index into the file's contents, BOM and CRLF included."""
     md_file = tmp_path / "crlf.md"
-    md_file.write_bytes("\ufeffIntro\r\n# A\r\nalpha\r\n## B\r\nbeta\r\n".encode("utf-8"))
-    contents = md_file.read_text(encoding="utf-8", newline="")
+    contents = "\ufeffIntro\r\n# A\r\nalpha\r\n## B\r\nbeta\r\n"
+    md_file.write_bytes(contents.encode("utf-8"))
 
     sections = splitter.split_file(md_file)
 
