@@ -2,6 +2,7 @@ import importlib
 import logging
 
 from markdown_chunkify.components.splitters import MarkdownSplitter
+from markdown_chunkify.core.models import OutlineNode
 from markdown_chunkify.core.models import Section
 from markdown_chunkify.core.models import SectionMetadata
 
@@ -31,6 +32,7 @@ def __getattr__(name: str):
 
 __all__ = [
     "MarkdownSplitter",
+    "OutlineNode",
     "PyMuPDFMParser",
     "Section",
     "SectionMetadata",

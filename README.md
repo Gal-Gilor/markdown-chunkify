@@ -1,4 +1,4 @@
-[![Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml)
+[![Lint, test and build](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml/badge.svg)](https://github.com/Gal-Gilor/markdown-chunkify/actions/workflows/lint-test-build.yaml) [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Gal-Gilor/markdown-chunkify)
 
 # markdown-chunkify
 
@@ -42,8 +42,10 @@ sections = splitter.split_text(markdown_text)
 # Split from file
 sections = splitter.split_file("document.md")
 
-# Nested outline instead of a flat list
+# Nested outline of OutlineNode models instead of a flat list
 outline = splitter.get_document_outline(markdown_text)
+outline[0].children  # The nodes nested under the first node
+[node.model_dump() for node in outline]  # The outline as nested dicts
 ```
 
 Convert a PDF to Markdown (`pdf` extra):
@@ -120,8 +122,9 @@ Headers are found before the text is transliterated, so spans still point at the
 
 ## Data Models
 
-`Section` and `SectionMetadata` are exported from the package root:
+`Section`, `SectionMetadata` and `OutlineNode` are exported from the package root:
 ```python
+from markdown_chunkify import OutlineNode
 from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
@@ -172,6 +175,27 @@ class SectionMetadata(BaseModel):
 ```
 
 The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written. A normalized section keeps the span and character count of the source text, so `text[start:end]` returns the text before transliteration.
+
+### OutlineNode
+
+A node of the outline returned by `get_document_outline`. It holds a header, its content and the nodes nested under it.
+```python
+class OutlineNode(BaseModel):
+    # The header text, empty for text before the first header
+    header: str
+    # The text under the header, up to the next header
+    content: str
+    # Number of # symbols (1-6), 0 for text before the first header
+    level: int
+    # Position in document order, starting at 0, the same as the section's id
+    id: int
+    # Id of the enclosing node, None for top-level nodes
+    parent_id: int | None
+    # Start (inclusive) and end (exclusive) offsets in the source text
+    span: tuple[int, int]
+    # Nodes of the headers nested under this header
+    children: list[OutlineNode]
+```
 
 ## Requirements
 

@@ -279,7 +279,7 @@ def test_duplicate_headers_in_outline(splitter):
     """The outline keeps headers with the same text as separate nodes."""
     outline = splitter.get_document_outline("# A\n## Notes\nOne\n## Notes\nTwo")
 
-    assert [child["content"] for child in outline[0]["children"]] == ["One", "Two"]
+    assert [child.content for child in outline[0].children] == ["One", "Two"]
 
 
 def test_siblings_do_not_leak_between_same_named_parents(splitter):
@@ -475,9 +475,8 @@ def test_outline_ids(splitter):
     """Outline nodes carry the same ids and parent ids as the sections."""
     outline = splitter.get_document_outline("Intro\n# A\n## B\n# C")
 
-    assert [(n["id"], n["parent_id"]) for n in outline] == [(0, None), (1, None), (3, None)]
-    assert (outline[1]["children"][0]["id"], outline[1]["children"][0]["parent_id"]) == (2, 1)
-    assert "siblings" not in outline[1]
+    assert [(n.id, n.parent_id) for n in outline] == [(0, None), (1, None), (3, None)]
+    assert (outline[1].children[0].id, outline[1].children[0].parent_id) == (2, 1)
 
 
 def test_byte_order_mark_in_text(splitter):
@@ -491,7 +490,7 @@ def test_byte_order_mark_in_outline(splitter):
     """get_document_outline also ignores a byte order mark."""
     outline = splitter.get_document_outline("\ufeff# Title\nText")
 
-    assert [(node["level"], node["header"]) for node in outline] == [(1, "Title")]
+    assert [(node.level, node.header) for node in outline] == [(1, "Title")]
 
 
 def test_byte_order_mark_in_file(splitter, tmp_path):
@@ -689,8 +688,16 @@ def test_outline_keeps_source_text(splitter):
     """get_document_outline returns the source text, without normalization."""
     outline = splitter.get_document_outline("# Café\nnaïve")
 
-    assert (outline[0]["header"], outline[0]["content"]) == ("Café", "naïve")
-    assert "normalized" not in outline[0]
+    assert (outline[0].header, outline[0].content) == ("Café", "naïve")
+    assert outline[0].model_dump() == {
+        "header": "Café",
+        "content": "naïve",
+        "level": 1,
+        "id": 0,
+        "parent_id": None,
+        "span": (0, 12),
+        "children": [],
+    }
 
 
 def test_split_file_normalize_unicode(splitter, tmp_path):
