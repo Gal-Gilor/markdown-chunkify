@@ -45,20 +45,18 @@ class MarkdownSplitter(BaseSplitter):
     """Split Markdown documents into sections based on header hierarchy.
 
     Processes Markdown documents and splits them into sections based on
-    header levels (# through ######). It maintains the hierarchical relationships between
-    sections and tracks sibling headers at the same level. Valid Markdown headers start
-    with 1-6 '#' followed by a space (e.g., "# Header 1", "## Header 2").
+    header levels (# through ######). Each section gets an id and the id of its parent
+    section, so the header hierarchy can be rebuilt as a tree. Valid Markdown headers
+    start with 1-6 '#' followed by a space (e.g., "# Header 1", "## Header 2").
 
     Key Features:
         - Splits Markdown text into sections based on headers
-        - Maintains parent-child relationships between headers
-        - Tracks sibling headers at the same level
+        - Gives each section an id (its position in document order) and its parent's id
         - Ignores lines inside fenced code blocks (``` or ~~~), HTML comment blocks and
           YAML front matter, so '#' lines there are not headers
         - Keeps section text exactly as written, including code blocks
         - Returns text before the first header as a level-0 section with an empty header
         - Supports headers up to level 6, or a lower limit set with `max_level`
-        - Optionally caps each sibling list with `max_siblings`
         - Optionally transliterates headers and text to ASCII ('Café' -> 'Cafe') with
           `normalize_unicode=True`, keeping spans on the source text
 
@@ -71,9 +69,6 @@ class MarkdownSplitter(BaseSplitter):
           closed, the headers after it are treated as text and a warning is logged.
         - An HTML comment is only recognized when '<!--' starts the line. A comment that
           opens mid-line ('text <!--') does not hide the '#' lines inside it.
-        - Without `max_siblings`, a section lists every other header at its level under
-          the same parent. With n such headers, the sibling lists hold n * (n - 1) names,
-          which gets slow for thousands of headers at one level.
 
     Example:
         >>> splitter = MarkdownSplitter()
@@ -93,38 +88,36 @@ class MarkdownSplitter(BaseSplitter):
         >>> for section in sections:
         ...     print(f"Header: {section.section_header}")
         ...     print(f"Level: {section.header_level}")
+        ...     print(f"Id: {section.metadata.id}")
+        ...     print(f"Parent id: {section.metadata.parent_id}")
         ...     print(f"Parents: {section.metadata.parents}")
-        ...     print(f"Siblings: {section.metadata.siblings}")
         Header: Introduction
         Level: 1
+        Id: 0
+        Parent id: None
         Parents: {}
-        Siblings: []
         Header: Installation
         Level: 2
+        Id: 1
+        Parent id: 0
         Parents: {'h1': 'Introduction'}
-        Siblings: ['Usage']
         Header: Usage
         Level: 2
+        Id: 2
+        Parent id: 0
         Parents: {'h1': 'Introduction'}
-        Siblings: ['Installation']
     """
 
-    def __init__(self, max_level: int = MAX_HEADER_LEVEL, max_siblings: int | None = None):
+    def __init__(self, max_level: int = MAX_HEADER_LEVEL):
         """Initialize the splitter.
 
         Args:
             max_level (int): The deepest header level to split on (1-6). Deeper headers
                 are kept as text of the enclosing section.
-            max_siblings (int | None): The maximum number of siblings listed per section.
-                The siblings nearest to the section in document order are kept. None
-                lists every sibling.
         """
         if not 1 <= max_level <= MAX_HEADER_LEVEL:
             raise ValueError(f"max_level must be between 1 and {MAX_HEADER_LEVEL}.")
-        if max_siblings is not None and max_siblings < 0:
-            raise ValueError("max_siblings must be 0 or greater.")
         self.max_level = max_level
-        self.max_siblings = max_siblings
 
     @staticmethod
     def _closes_fence(line: str, fence: str) -> bool:
@@ -222,38 +215,12 @@ class MarkdownSplitter(BaseSplitter):
         """Remove leading blank lines and trailing whitespace, keeping indentation."""
         return _LEADING_BLANK_LINES_PATTERN.sub("", text).rstrip()
 
-    def _nearest_siblings(self, names: List[str], index: int) -> List[str]:
-        """Return the names around `index`, without it, capped at `max_siblings`."""
-        if self.max_siblings is None or self.max_siblings >= len(names) - 1:
-            return names[:index] + names[index + 1 :]
-
-        # A window of max_siblings + 1 names that contains index, centered where possible.
-        # With an odd max_siblings, the extra sibling comes from before the section.
-        last_start = len(names) - 1 - self.max_siblings
-        start = min(max(0, index - (self.max_siblings + 1) // 2), last_start)
-        end = start + self.max_siblings + 1
-        return names[start:index] + names[index + 1 : end]
-
-    def _set_siblings(self, nodes: List[Dict]) -> None:
-        """Set each node's siblings: other nodes at the same level under the same parent."""
-        nodes_by_level = {}
-        for node in nodes:
-            nodes_by_level.setdefault(node["level"], []).append(node)
-
-        for same_level_nodes in nodes_by_level.values():
-            names = [node["header"] for node in same_level_nodes]
-            for index, node in enumerate(same_level_nodes):
-                node["siblings"] = self._nearest_siblings(names, index)
-
-        for node in nodes:
-            self._set_siblings(node["children"])
-
     def get_document_outline(self, text: str) -> List[Dict]:
-        """Generate a nested document outline with header hierarchy and sibling relationships.
+        """Generate a nested document outline with the header hierarchy.
 
         Processes a Markdown document and creates a hierarchical structure that
-        captures the relationships between headers, their content, and sibling headers at
-        the same level. Headers with the same text are kept as separate nodes.
+        captures the relationships between headers and their content. Headers with the
+        same text are kept as separate nodes.
 
         Args:
             text (str): The Markdown text to process. Should contain headers marked with '#'
@@ -265,7 +232,9 @@ class MarkdownSplitter(BaseSplitter):
                 - content (str): The text under the header, up to the next header
                 - level (int): The header level (1 for H1, 2 for H2, etc.)
                 - children (List[Dict]): Nested headers under this header
-                - siblings (List[str]): Headers at the same level with the same parent
+                - id (int): The node's position in document order, starting at 0
+                - parent_id (int | None): The id of the enclosing node. None for top-level
+                  nodes
                 - span (tuple[int, int]): The start and end offsets of the node's header
                   line and content in `text`, without leading blank lines and trailing
                   whitespace
@@ -296,11 +265,13 @@ class MarkdownSplitter(BaseSplitter):
                             "content": "Content A",
                             "level": 2,
                             "children": [],
-                            "siblings": [],
+                            "id": 1,
+                            "parent_id": 0,
                             "span": (22, 46),
                         }
                     ],
-                    "siblings": ["Header 2"],
+                    "id": 0,
+                    "parent_id": None,
                     "span": (1, 21),
                 },
                 {
@@ -308,7 +279,8 @@ class MarkdownSplitter(BaseSplitter):
                     "content": "Content 2",
                     "level": 1,
                     "children": [],
-                    "siblings": ["Header 1"],
+                    "id": 2,
+                    "parent_id": None,
                     "span": (47, 67),
                 },
             ]
@@ -326,8 +298,8 @@ class MarkdownSplitter(BaseSplitter):
         """Build the outline described in `get_document_outline`.
 
         With `normalize_unicode`, each node's header and content are transliterated to
-        ASCII before siblings are set, so the parents and siblings of the sections match
-        their headers. Spans stay offsets in the source text.
+        ASCII, so the parents of the sections match their headers. Spans stay offsets in
+        the source text.
         """
         # Spans are offsets in the text as passed in, byte order mark included
         offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
@@ -338,7 +310,7 @@ class MarkdownSplitter(BaseSplitter):
 
         headers = self._find_headers(text)
         document_outline = []
-        # Nodes in document order, to normalize after their spans are set
+        # Nodes in document order. A node's index in this list is its id.
         nodes = []
 
         preamble_end = headers[0][0] if headers else len(text)
@@ -351,7 +323,8 @@ class MarkdownSplitter(BaseSplitter):
                     "content": preamble,
                     "level": 0,
                     "children": [],
-                    "siblings": [],
+                    "id": 0,
+                    "parent_id": None,
                     "span": (preamble_start, preamble_start + len(preamble)),
                 }
             )
@@ -363,18 +336,19 @@ class MarkdownSplitter(BaseSplitter):
         for i, (line_start, content_start, level, header_text) in enumerate(headers):
             content_end = headers[i + 1][0] if i + 1 < len(headers) else len(text)
             span_end = line_start + len(text[line_start:content_end].rstrip())
+
+            while node_stack and node_stack[-1]["level"] >= level:
+                node_stack.pop()
+
             node = {
                 "header": header_text,
                 "content": self._trim(text[content_start:content_end]),
                 "level": level,
                 "children": [],
-                "siblings": [],
+                "id": len(nodes),
+                "parent_id": node_stack[-1]["id"] if node_stack else None,
                 "span": (offset + line_start, offset + span_end),
             }
-
-            while node_stack and node_stack[-1]["level"] >= level:
-                node_stack.pop()
-
             parent_children = node_stack[-1]["children"] if node_stack else document_outline
             parent_children.append(node)
             node_stack.append(node)
@@ -384,8 +358,6 @@ class MarkdownSplitter(BaseSplitter):
             for node in nodes:
                 self._normalize_node(node)
 
-        self._set_siblings(document_outline)
-
         return document_outline
 
     def _create_sections_from_outline(
@@ -394,7 +366,7 @@ class MarkdownSplitter(BaseSplitter):
         """Convert a document outline into a flat list of Section objects.
 
         Traverses the hierarchical document outline in document order and creates Section
-        objects that keep the parent-child relationships and sibling connections.
+        objects that keep the parent-child relationships.
 
         Args:
             outline (List[Dict]): Nodes as returned by `get_document_outline`.
@@ -407,8 +379,8 @@ class MarkdownSplitter(BaseSplitter):
                 - section_header (str): The header text
                 - section_text (str): The content under the header
                 - header_level (int): The level of the header
-                - metadata (SectionMetadata): Contains parent headers, sibling information,
-                  the section's span and its character count
+                - metadata (SectionMetadata): Contains the section's id, its parent's id,
+                  the parent headers, the section's span and its character count
         """
         parent_headers = parent_headers or {}
         sections = []
@@ -420,8 +392,9 @@ class MarkdownSplitter(BaseSplitter):
                     section_text=node["content"],
                     header_level=node["level"],
                     metadata=SectionMetadata(
+                        id=node["id"],
+                        parent_id=node["parent_id"],
                         parents=dict(parent_headers),
-                        siblings=node["siblings"],
                         normalized=node.get("normalized", False),
                         span=node["span"],
                         char_count=node["span"][1] - node["span"][0],
@@ -440,10 +413,10 @@ class MarkdownSplitter(BaseSplitter):
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Processes a Markdown document and splits it into sections based on
-        headers. It maintains the hierarchical relationships between sections and tracks
-        sibling headers at the same level. Sibling relationships are based on headers at
-        the same level with the same parent. Lines inside fenced code blocks are not
-        treated as headers.
+        headers. Each section records its id and its parent's id, so the hierarchy can be
+        rebuilt: a section's children are the sections whose `parent_id` is its `id`, and
+        sections with the same `parent_id` are siblings, whatever their header levels.
+        Lines inside fenced code blocks are not treated as headers.
 
         Args:
             text (str): The Markdown text to split. Should contain headers marked with '#'
@@ -460,8 +433,10 @@ class MarkdownSplitter(BaseSplitter):
                 - section_text (str): The content between this header and the next
                 - header_level (int): The level of the header (1 for H1, 2 for H2, etc.)
                 - metadata (SectionMetadata): Contains:
+                    - id (int): The section's index in the returned list
+                    - parent_id (int | None): The id of the enclosing section, or None for
+                      top-level sections
                     - parents (Dict[str, str]): Parent headers by level
-                    - siblings (List[str]): Other headers at same level with same parent
                     - span (tuple[int, int]): The start and end offsets of the header line
                       and section text in `text`, so `text[start:end]` is the section as
                       written
@@ -484,8 +459,8 @@ class MarkdownSplitter(BaseSplitter):
             'Main Topic'
             >>> sections[1].metadata.parents
             {'h1': 'Main Topic'}
-            >>> sections[1].metadata.siblings
-            ['Sub Topic B']
+            >>> sections[2].metadata.parent_id
+            0
         """
         if not text.removeprefix(_BYTE_ORDER_MARK).strip():
             logger.warning("`split_text` received empty text input.")

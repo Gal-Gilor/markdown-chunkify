@@ -2,13 +2,13 @@
 
 # MarkdownSplitter
 
-A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, can transliterate Unicode to ASCII, and can optionally convert PDFs to Markdown.
+A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, links each section to its parent section, can transliterate Unicode to ASCII, and can optionally convert PDFs to Markdown.
 
 ## Features
 
 - Lines inside fenced code blocks (```` ``` ```` or `~~~`, including fences in list items), HTML comment blocks and YAML front matter are never treated as headers. Section text keeps them exactly as written
 - Splits on headers from H1 to H6. `MarkdownSplitter(max_level=3)` keeps deeper headers as text of the enclosing section
-- Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections. `MarkdownSplitter(max_siblings=10)` lists only the 10 nearest siblings
+- Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written, and `metadata.char_count` is its length
 - Keeps the source text by default. `normalize_unicode=True` transliterates headers and text to ASCII (`Café` becomes `Cafe`)
@@ -68,9 +68,29 @@ markdown_text = PyMuPDFMParser.to_markdown(
 )
 ```
 
+### Section ids and parents
+
+`metadata.id` is the section's position in document order, starting at 0, so `sections[i].metadata.id == i`. `metadata.parent_id` is the id of the enclosing section, or `None` for top-level sections and text before the first header.
+```python
+text = "# Docker\n## Installation\n## Usage\n# Kubernetes"
+sections = splitter.split_text(text)
+
+[(s.section_header, s.metadata.id, s.metadata.parent_id) for s in sections]
+# [('Docker', 0, None), ('Installation', 1, 0), ('Usage', 2, 0), ('Kubernetes', 3, None)]
+
+sections[sections[1].metadata.parent_id].section_header  # 'Docker'
+```
+
+The other relationships follow from these two fields:
+- A section's children are the sections whose `parent_id` is its `id`.
+- Sections with the same `parent_id` are siblings, whatever their header levels. In `# A`, `### C`, `## B`, both C and B are children of A. A skipped level adds no placeholder section.
+- The previous and next sections in reading order have ids `id - 1` and `id + 1`.
+
+Ids are unique within one document. To use them across documents, combine them with your own document key, such as `f"{doc_key}:{section.metadata.id}"`. Ids are positions, not content versions: inserting or removing a section renumbers the sections after it, and editing a section's text keeps its id. To detect changed sections between runs, for example to skip re-extracting entities from unchanged text, hash `section_text`. Changing `max_level` changes the tree and the ids.
+
 ### Unicode normalization
 
-With `normalize_unicode=True`, `split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents and siblings use the transliterated headers. It is off by default.
+With `normalize_unicode=True`, `split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents use the transliterated headers. It is off by default.
 ```python
 text = "# Café\nnaïve — “quoted”"
 
@@ -91,7 +111,6 @@ Headers are found before the text is transliterated, so spans still point at the
 - A line indented by 4 or more spaces that starts with ```` ``` ```` or `~~~` is treated as a fence, even inside an indented code block. If that fence is never closed, the headers after it are treated as text and a warning is logged.
 - An HTML comment is only recognized when `<!--` starts the line. A comment that opens mid-line (`text <!--`) does not hide the `#` lines inside it.
 - A document that starts with `---` is treated as having YAML front matter only if the line after it is a `key:` entry and every line up to the next `---` or `...` looks like YAML (`key: value`, `- item`, indented lines, comments or blank lines). Otherwise the `---` is a horizontal rule and the headers after it are split as usual.
-- Without `max_siblings`, each section lists every other header at its level under the same parent. With n such headers, the lists hold n * (n - 1) names: 6,000 headers at one level take a few seconds to split. Set `max_siblings` for documents like that.
 
 ## Data Models
 
@@ -120,15 +139,17 @@ class Section(MarkdownContent):
     def to_markdown(self) -> str: ...
 ```
 
-**SectionMetadata:** A Section's metadata: whether Unicode normalization changed it, its parent and sibling headers, and where it is in the source text.
+**SectionMetadata:** A Section's metadata: its id, its parent's id, its parent headers, whether Unicode normalization changed it, and where it is in the source text.
 ```python
 class SectionMetadata(BaseModel):
+    # Position in document order, starting at 0
+    id: int | None
+    # Id of the enclosing section, None for top-level sections
+    parent_id: int | None
     # Whether Unicode normalization changed the header or text
     normalized: bool
     # Parent headers by level, such as {"h1": "Guide", "h2": "Install"}
     parents: dict[str, str | None]
-    # Headers at the same level with the same parent
-    siblings: list[str]
     # Start (inclusive) and end (exclusive) offsets in the source text
     span: tuple[int, int] | None
     # Number of characters in the span
