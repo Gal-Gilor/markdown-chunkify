@@ -302,6 +302,7 @@ def test_no_headers(splitter):
         ("## #1 Priority", "#1 Priority"),
         ("   ## Indented", "Indented"),
         ("## C# Guide", "C# Guide"),
+        ("# # #", "#"),
     ],
 )
 def test_header_text(splitter, line, expected_header):
@@ -311,9 +312,15 @@ def test_header_text(splitter, line, expected_header):
     assert sections[0].section_header == expected_header
 
 
-@pytest.mark.parametrize("line", ["#hashtag", "#", "    # Indented code"])
+@pytest.mark.parametrize(
+    "line",
+    ["#hashtag", "#", "    # Indented code", "#   \t", "# ", "## #", "# #", "## ##"],
+)
 def test_not_a_header(splitter, line):
-    """Lines without a space after '#', bare '#' and 4-space indents are not headers."""
+    """Lines without a space after '#', bare '#' and 4-space indents are not headers.
+
+    Empty headings (no text after the '#') are not headers either.
+    """
     sections = splitter.split_text(f"# Header\n{line}\nNext line")
 
     assert len(sections) == 1

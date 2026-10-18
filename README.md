@@ -126,6 +126,7 @@ Headers are found before the text is transliterated, so spans still point at the
 - Headers and fences inside blockquotes (`> # Title`) are not recognized.
 - A line indented by 4 or more spaces that starts with ```` ``` ```` or `~~~` is treated as a fence, even inside an indented code block. If that fence is never closed, the headers after it are treated as text and a warning is logged.
 - An HTML comment is only recognized when `<!--` starts the line. A comment that opens mid-line (`text <!--`) does not hide the `#` lines inside it.
+- A header with no text (`#`, `## ##`, or only whitespace after the `#`) is kept as text of the enclosing section, not an empty section. CommonMark renders it as an empty heading.
 - A document that starts with `---` is treated as having YAML front matter only if the line after it is a `key:` entry and every line up to the next `---` or `...` looks like YAML (`key: value`, `- item`, indented lines, comments or blank lines). Otherwise the `---` is a horizontal rule and the headers after it are split as usual.
 
 ## Data Models

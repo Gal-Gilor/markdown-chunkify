@@ -16,9 +16,10 @@ logger = logging.getLogger(__name__)
 
 MAX_HEADER_LEVEL = 6
 
-# ATX header: up to 3 spaces of indent, 1-6 '#', whitespace, the header text and an
-# optional closing sequence of '#'.
-_HEADER_PATTERN = re.compile(r"^ {0,3}(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$")
+# ATX header: up to 3 spaces of indent, 1-6 '#', then optionally whitespace and the
+# header text, and an optional closing sequence of '#'. A header without text is not a
+# header, so its line stays in the section text.
+_HEADER_PATTERN = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))??(?:[ \t]+#+)?[ \t]*$")
 # Opening code fence: 3+ backticks or tildes, at any indentation and optionally after a
 # list marker, so fences inside list items are found. A backtick fence's info string
 # cannot contain backticks.
@@ -69,6 +70,8 @@ class MarkdownSplitter(BaseSplitter):
           closed, the headers after it are treated as text and a warning is logged.
         - An HTML comment is only recognized when '<!--' starts the line. A comment that
           opens mid-line ('text <!--') does not hide the '#' lines inside it.
+        - A header with no text ('#', '## ##' or only whitespace after the '#') is kept as
+          text of the enclosing section, not an empty section.
 
     Example:
         >>> splitter = MarkdownSplitter()
@@ -197,7 +200,11 @@ class MarkdownSplitter(BaseSplitter):
                 continue
 
             header_match = _HEADER_PATTERN.match(line)
-            if header_match and len(header_match.group(1)) <= self.max_level:
+            if (
+                header_match
+                and header_match.group(2)
+                and len(header_match.group(1)) <= self.max_level
+            ):
                 level = len(header_match.group(1))
                 headers.append((line_start, position, level, header_match.group(2)))
 
