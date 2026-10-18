@@ -1,7 +1,7 @@
 [project]
 name = "markdown-chunkify"
 version = "0.3.0"
-description = "Split Markdown documents into hierarchical sections."
+description = "Split Markdown into hierarchical sections with ids, parent links and source spans."
 authors = [
     {name = "Gal Gilor"}
 ]
@@ -9,6 +9,19 @@ readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE"]
 requires-python = ">=3.12"
+keywords = ["markdown", "chunking", "text-splitter", "rag", "embeddings", "llm", "pdf"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Typing :: Typed",
+]
 dependencies = [
     "anyascii>=0.3.3",
     "pydantic>=2.14.1",
@@ -20,7 +33,8 @@ pdf = [
 ]
 
 [project.urls]
-Github = "https://github.com/Gal-Gilor/markdown-chunkify"
+Homepage = "https://github.com/Gal-Gilor/markdown-chunkify"
+Changelog = "https://github.com/Gal-Gilor/markdown-chunkify/blob/main/CHANGELOG.md"
 Issues = "https://github.com/Gal-Gilor/markdown-chunkify/issues"
 
 [dependency-groups]
