@@ -31,53 +31,31 @@ class PyMuPDFMParser(BaseParser):
         Returns:
             str: A Markdown representation of the PDF file.
         """
-        file_name = Path(file_path)
-        logger.info(f"Starting the PDF to Markdown conversion for: {file_name}")
+        path = Path(file_path)
+        logger.info(f"Starting the PDF to Markdown conversion for: {path}")
 
-        if not Path(file_path).exists():
-            error_msg = f"File not found: {file_path}"
-            logger.error(error_msg)
-            raise FileNotFoundError(error_msg)
+        if not path.exists():
+            raise FileNotFoundError(f"File not found: {file_path}")
 
-        try:
-            logger.debug(f"Converting PDF to Markdown: {file_name}")
-            start_time = time.time()
-            markdown = pymupdf4llm.to_markdown(file_path, **kwargs)
+        logger.debug(f"Converting PDF to Markdown: {path}")
+        start_time = time.time()
+        markdown = pymupdf4llm.to_markdown(file_path, **kwargs)
+        logger.info(
+            f"{path} was successfully converted to Markdown in "
+            f"{time.time() - start_time:.2f} seconds."
+        )
+
+        if destination_path:
+            destination = Path(destination_path)
+            logger.debug(f"Preparing to save Markdown to: {destination}")
+            destination.mkdir(parents=True, exist_ok=True)
+            markdown_output_path = destination / f"{path.stem}.md"
+
+            with open(markdown_output_path, "w", encoding="utf-8") as f:
+                f.write(markdown)
+
             logger.info(
-                f"{file_name} was successfully converted to Markdown in "
-                f"{time.time() - start_time:.2f} seconds."
+                f"{path} was successfully saved to: {markdown_output_path} as Markdown."
             )
 
-            if destination_path:
-                logger.debug(f"Preparing to save Markdown to: {destination_path}")
-                if isinstance(destination_path, str):
-                    destination_path = Path(destination_path)
-
-                try:
-                    destination_path.mkdir(parents=True, exist_ok=True)
-                    markdown_output_path = destination_path / f"{file_name.stem}.md"
-
-                    with open(markdown_output_path, "w", encoding="utf-8") as f:
-                        f.write(markdown)
-
-                    logger.info(
-                        f"{file_name} was successfully saved to: "
-                        f"{markdown_output_path} as Markdown."
-                    )
-
-                except Exception as e:
-                    logger.error(
-                        f"Failed to save the Markdown to: {destination_path}. "
-                        f"Error: {str(e)}",
-                        exc_info=True,
-                    )
-                    raise
-
-            return markdown
-
-        except Exception as e:
-            logger.error(
-                f"Failed to convert {file_name} to Markdown. Error: {str(e)}",
-                exc_info=True,
-            )
-            raise
+        return markdown
