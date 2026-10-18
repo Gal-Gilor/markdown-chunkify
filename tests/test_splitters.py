@@ -1,6 +1,8 @@
 import pytest
+from pydantic import ValidationError
 
 from markdown_chunkify.components.splitters import MarkdownSplitter
+from markdown_chunkify.core.models import SectionMetadata
 
 
 def test_empty_input(splitter):
@@ -156,6 +158,12 @@ def test_breadcrumb_follows_normalization(splitter):
     assert splitter.split_text(text, normalize_unicode=True)[1].breadcrumb() == (
         "Cafe > Strasse"
     )
+
+
+def test_parents_reject_none():
+    """A None parent header fails validation instead of breaking breadcrumb()."""
+    with pytest.raises(ValidationError):
+        SectionMetadata(parents={"h1": None})
 
 
 def test_code_block_kept_verbatim(splitter):

@@ -170,7 +170,7 @@ class SectionMetadata(BaseModel):
     # Whether Unicode normalization changed the header or text
     normalized: bool
     # Parent headers by level, such as {"h1": "Guide", "h2": "Install"}
-    parents: dict[str, str | None]
+    parents: dict[str, str]
     # Start (inclusive) and end (exclusive) offsets in the source text
     span: tuple[int, int] | None
     # Number of characters in the span
