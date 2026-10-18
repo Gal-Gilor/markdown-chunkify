@@ -42,7 +42,7 @@ line-length = 94
 fix = true
 
 [tool.ruff.lint]
-select = ["E", "F", "I"]
+select = ["E", "F", "I", "UP"]
 
 [tool.ruff.lint.isort]
 force-single-line = true
