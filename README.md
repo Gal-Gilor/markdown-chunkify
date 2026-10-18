@@ -33,12 +33,9 @@ sections = splitter.split_text(markdown_text)
 
 # Split from file
 sections = splitter.split_file("document.md")
-
-# Nested outline of OutlineNode models instead of a flat list
-outline = splitter.get_document_outline(markdown_text)
-outline[0].children  # The nodes nested under the first node
-[node.model_dump() for node in outline]  # The outline as nested dicts
 ```
+
+`MarkdownSplitter` is immutable, so one instance can be reused.
 
 ### Section ids and parents
 
@@ -114,14 +111,13 @@ NFKC also folds superscripts and subscripts, so `x²` becomes `x2`. It leaves so
 
 ## Data Models
 
-`Section`, `SectionMetadata` and `OutlineNode` are exported from the package root:
+`Section` and `SectionMetadata` are exported from the package root:
 ```python
-from markdown_chunkify import OutlineNode
 from markdown_chunkify import Section
 from markdown_chunkify import SectionMetadata
 ```
 
-The models are frozen, so to change a section, call `section.model_copy(update={"content": "..."})`, which returns a changed copy.
+The models are frozen, so to change a section, call `section.model_copy(update={"content": "..."})`, which returns a changed copy. The freezing is shallow: `metadata.parents` is a plain dict, so treat it as read-only.
 
 ### Section
 
@@ -166,29 +162,6 @@ class SectionMetadata(BaseModel):
 ```
 
 The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written.
-
-### OutlineNode
-
-A node of the outline returned by the `get_document_outline` method. It holds a header, its content and the nodes nested under it.
-```python
-class OutlineNode(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    # The header text, empty for text before the first header
-    header: str
-    # The text under the header, up to the next header
-    content: str
-    # Number of # symbols (1-6), 0 for text before the first header
-    level: int
-    # Position in document order, starting at 0, the same as the section's id
-    id: int
-    # Id of the enclosing node, None for top-level nodes
-    parent_id: int | None
-    # Start (inclusive) and end (exclusive) offsets in the source text
-    span: tuple[int, int]
-    # Nodes of the headers nested under this header
-    children: list[OutlineNode]
-```
 
 ## Requirements
 

@@ -51,10 +51,16 @@ class Section(BaseModel):
     metadata: SectionMetadata = Field(..., description="The Markdown section metadata.")
 
     def to_markdown(self) -> str:
-        """Convert the section to a Markdown string."""
+        """Convert the section to a Markdown string.
+
+        A section without content returns only its header line.
+        """
         if self.level == 0:
             return self.content
-        return f"{'#' * self.level} {self.header}\n\n{self.content}"
+        header_line = f"{'#' * self.level} {self.header}"
+        if not self.content:
+            return header_line
+        return f"{header_line}\n\n{self.content}"
 
     def breadcrumb(self, separator: str = " > ") -> str:
         """Join the parent headers and the section's own header, such as 'Docker > Setup'.
@@ -62,36 +68,3 @@ class Section(BaseModel):
         Text before the first header has no headers and returns an empty string.
         """
         return separator.join([*self.metadata.parents.values(), self.header])
-
-
-class OutlineNode(BaseModel):
-    """A header and its content in a document outline, with its nested headers."""
-
-    model_config = ConfigDict(frozen=True)
-
-    header: str = Field(
-        ..., description="The header text. Empty for text before the first header"
-    )
-    content: str = Field(..., description="The text under the header, up to the next header")
-    level: int = Field(
-        ...,
-        ge=0,
-        description=(
-            "The level of the header (number of #). 0 for text before the first header."
-        ),
-    )
-    id: int = Field(..., description="The node's position in document order, starting at 0")
-    parent_id: int | None = Field(
-        ..., description="The id of the enclosing node. None for top-level nodes"
-    )
-    span: tuple[int, int] = Field(
-        ...,
-        description=(
-            "The start (inclusive) and end (exclusive) character offsets of the node, "
-            "header line included, in the source text"
-        ),
-    )
-    children: list["OutlineNode"] = Field(
-        default_factory=list,
-        description="The nodes of the headers nested under this header, in document order",
-    )

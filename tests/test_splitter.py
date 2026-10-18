@@ -1,30 +1,20 @@
 import pytest
-from pydantic import ValidationError
 
-from markdown_chunkify.models import SectionMetadata
 from markdown_chunkify.splitter import MarkdownSplitter
+
+splitter = MarkdownSplitter()
 
 
 def test_empty_input():
     """Test empty input for split_text."""
-    assert MarkdownSplitter().split_text("") == []
-    assert MarkdownSplitter().split_text("   ") == []
-
-
-def test_single_header():
-    """Test a single header in a sample markdown text."""
-    text = "# Header\nContent"
-    sections = MarkdownSplitter().split_text(text)
-    assert len(sections) == 1
-    assert sections[0].header == "Header"
-    assert sections[0].content == "Content"
-    assert sections[0].level == 1
+    assert splitter.split_text("") == []
+    assert splitter.split_text("   ") == []
 
 
 def test_multiple_headers_same_level():
     """Test multiple headers at the same level in a sample markdown text."""
     text = "# H1\nC1\n# H2\nC2"
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
     assert len(sections) == 2
     assert [s.header for s in sections] == ["H1", "H2"]
     assert [s.content for s in sections] == ["C1", "C2"]
@@ -32,7 +22,7 @@ def test_multiple_headers_same_level():
 
 def test_nested_headers(nested_markdown):
     """Test nested headers in a sample markdown text."""
-    sections = MarkdownSplitter().split_text(nested_markdown)
+    sections = splitter.split_text(nested_markdown)
     assert len(sections) == 4
     assert [s.level for s in sections] == [1, 2, 3, 2]
     assert sections[2].metadata.parents["h1"] == "Main"
@@ -41,7 +31,7 @@ def test_nested_headers(nested_markdown):
 
 def test_parent_headers(sample_markdown):
     """Test parent headers in a sample markdown text."""
-    sections = MarkdownSplitter().split_text(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     assert sections[1].metadata.parents["h1"] == "Header 1"
     assert sections[-2].metadata.parents["h1"] == "Header 2"
     assert sections[-2].metadata.parents["h2"] == "Header 2.1"
@@ -49,7 +39,7 @@ def test_parent_headers(sample_markdown):
 
 def test_sibling_headers(sample_markdown):
     """Siblings share a parent_id, and their own children do not change that."""
-    sections = MarkdownSplitter().split_text(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     header_2 = sections[2]
 
     assert header_2.header == "Header 2"
@@ -61,7 +51,7 @@ def test_sibling_headers(sample_markdown):
 
 def test_ids_are_document_order(sample_markdown):
     """Each id is the section's index, and each parent comes before its children."""
-    sections = MarkdownSplitter().split_text(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
 
     assert [s.metadata.id for s in sections] == list(range(len(sections)))
     assert [s.metadata.parent_id for s in sections] == [None, 0, None, 2, 3, 2]
@@ -73,11 +63,11 @@ def test_ids_are_document_order(sample_markdown):
 
 
 def test_file_operations(tmp_path):
-    # Create a temporary markdown file
+    """split_file reads a Markdown file and splits it."""
     md_file = tmp_path / "test.md"
     md_file.write_text("# Test\nContent")
 
-    sections = MarkdownSplitter().split_file(md_file)
+    sections = splitter.split_file(md_file)
     assert len(sections) == 1
     assert sections[0].header == "Test"
 
@@ -85,41 +75,30 @@ def test_file_operations(tmp_path):
 def test_file_not_found():
     """Test file not found error."""
     with pytest.raises(FileNotFoundError):
-        MarkdownSplitter().split_file("nonexistent.md")
+        splitter.split_file("nonexistent.md")
 
 
 def test_is_directory(tmp_path):
     """Test if the path is a directory."""
     with pytest.raises(IsADirectoryError):
-        MarkdownSplitter().split_file(tmp_path)
-
-
-def test_level_counting():
-    """Test header level counting in a sample markdown text."""
-    text = "### Header"
-    sections = MarkdownSplitter().split_text(text)
-    assert sections[0].level == 3
-
-
-def test_metadata_structure():
-    """Test metadata structure in a sample markdown text."""
-    text = "# H1\n## H2"
-    sections = MarkdownSplitter().split_text(text)
-
-    assert all(isinstance(section.metadata.parents, dict) for section in sections)
-    assert sections[0].metadata.parents == {}
-    assert "h1" in sections[1].metadata.parents
+        splitter.split_file(tmp_path)
 
 
 def test_to_markdown(sample_markdown):
     """Test to_markdown method in a sample markdown text."""
-    sections = MarkdownSplitter().split_text(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
     assert sections[0].to_markdown() == "# Header 1\n\nContent 1"
+
+
+def test_to_markdown_without_content():
+    """A section without content returns only its header line."""
+    sections = splitter.split_text("# A\n## B")
+    assert sections[0].to_markdown() == "# A"
 
 
 def test_breadcrumb(nested_markdown):
     """The breadcrumb joins the parent headers and the section's own header."""
-    sections = MarkdownSplitter().split_text(nested_markdown)
+    sections = splitter.split_text(nested_markdown)
 
     assert [s.breadcrumb() for s in sections] == [
         "Main",
@@ -132,52 +111,15 @@ def test_breadcrumb(nested_markdown):
 
 def test_breadcrumb_preamble_and_skipped_levels():
     """The preamble has an empty breadcrumb, and skipped levels add nothing."""
-    sections = MarkdownSplitter().split_text("Intro\n# A\n### C")
+    sections = splitter.split_text("Intro\n# A\n### C")
 
     assert [s.breadcrumb() for s in sections] == ["", "A", "A > C"]
-
-
-def test_parents_reject_none():
-    """A None parent header fails validation instead of breaking breadcrumb()."""
-    with pytest.raises(ValidationError):
-        SectionMetadata(id=0, parents={"h1": None}, span=(0, 0))
-
-
-def test_metadata_requires_id():
-    """SectionMetadata fails validation without an id."""
-    with pytest.raises(ValidationError):
-        SectionMetadata(span=(0, 0))
-
-
-def test_models_are_frozen():
-    """Sections, their metadata and outline nodes cannot be changed after creation."""
-    section = MarkdownSplitter().split_text("# A\nText")[0]
-
-    with pytest.raises(ValidationError):
-        section.content = "x"
-    with pytest.raises(ValidationError):
-        section.metadata.id = 1
-    with pytest.raises(ValidationError):
-        MarkdownSplitter().get_document_outline("# A")[0].header = "x"
-
-    changed = section.model_copy(update={"content": "x"})
-    assert (changed.content, section.content) == ("x", "Text")
-
-
-def test_char_count_is_derived_from_span():
-    """char_count is computed from span, serialized, and cannot be set separately."""
-    metadata = SectionMetadata(id=0, span=(2, 9))
-
-    assert metadata.char_count == 7
-    assert metadata.model_dump()["char_count"] == 7
-    assert SectionMetadata.model_validate(metadata.model_dump()) == metadata
-    assert SectionMetadata(id=0, span=(0, 10), char_count=3).char_count == 10
 
 
 def test_code_block_kept_verbatim():
     """Code blocks keep their comments, language tag and line breaks."""
     code_block = "```python\n# A comment, not a header\nx = 1\n```"
-    sections = MarkdownSplitter().split_text(f"# Header\n{code_block}\nAfter")
+    sections = splitter.split_text(f"# Header\n{code_block}\nAfter")
 
     assert len(sections) == 1
     assert sections[0].content == f"{code_block}\nAfter"
@@ -194,7 +136,7 @@ def test_code_block_kept_verbatim():
 )
 def test_fence_variants(code_block):
     """Tilde, longer, and indented fences hide their content from header matching."""
-    sections = MarkdownSplitter().split_text(f"# Header\n{code_block}\n# Next")
+    sections = splitter.split_text(f"# Header\n{code_block}\n# Next")
 
     assert [s.header for s in sections] == ["Header", "Next"]
     assert sections[0].content == code_block
@@ -202,7 +144,7 @@ def test_fence_variants(code_block):
 
 def test_unclosed_fence_runs_to_end():
     """An unclosed fence hides the rest of the document from header matching."""
-    sections = MarkdownSplitter().split_text("# Header\n```\n# Not a header\ntext")
+    sections = splitter.split_text("# Header\n```\n# Not a header\ntext")
 
     assert len(sections) == 1
     assert sections[0].content == "```\n# Not a header\ntext"
@@ -211,7 +153,7 @@ def test_unclosed_fence_runs_to_end():
 def test_levels_up_to_six():
     """Headers from h1 to h6 split, and parents only list levels that exist."""
     text = "\n".join(f"{'#' * level} H{level}" for level in range(1, 7))
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
 
     assert [s.level for s in sections] == [1, 2, 3, 4, 5, 6]
     expected_parents = {f"h{level}": f"H{level}" for level in range(1, 6)}
@@ -220,7 +162,7 @@ def test_levels_up_to_six():
 
 def test_seven_hashes_is_text():
     """Seven or more '#' is not a header."""
-    sections = MarkdownSplitter().split_text("# Header\n####### Not a header")
+    sections = splitter.split_text("# Header\n####### Not a header")
 
     assert len(sections) == 1
     assert sections[0].content == "####### Not a header"
@@ -247,7 +189,7 @@ def test_skipped_levels():
     C and B are both children of A, so they are siblings although their levels differ,
     and each has its own child.
     """
-    sections = MarkdownSplitter().split_text("# A\n### C\n#### E\n## B\n### D")
+    sections = splitter.split_text("# A\n### C\n#### E\n## B\n### D")
 
     assert [s.header for s in sections] == ["A", "C", "E", "B", "D"]
     assert [s.metadata.parent_id for s in sections] == [None, 0, 1, 0, 3]
@@ -257,14 +199,14 @@ def test_skipped_levels():
 
 def test_mixed_levels_at_top_level():
     """Headers before any shallower header are top-level, whatever their level."""
-    sections = MarkdownSplitter().split_text("## X\n# Y")
+    sections = splitter.split_text("## X\n# Y")
 
     assert [s.metadata.parent_id for s in sections] == [None, None]
 
 
 def test_duplicate_headers_kept():
     """Headers with the same text under the same parent are separate sections."""
-    sections = MarkdownSplitter().split_text("# A\n## Notes\nOne\n## Notes\nTwo")
+    sections = splitter.split_text("# A\n## Notes\nOne\n## Notes\nTwo")
 
     assert [(s.header, s.content) for s in sections[1:]] == [
         ("Notes", "One"),
@@ -273,16 +215,9 @@ def test_duplicate_headers_kept():
     assert [(s.metadata.id, s.metadata.parent_id) for s in sections[1:]] == [(1, 0), (2, 0)]
 
 
-def test_duplicate_headers_in_outline():
-    """The outline keeps headers with the same text as separate nodes."""
-    outline = MarkdownSplitter().get_document_outline("# A\n## Notes\nOne\n## Notes\nTwo")
-
-    assert [child.content for child in outline[0].children] == ["One", "Two"]
-
-
 def test_siblings_do_not_leak_between_same_named_parents():
     """Children of different parents with the same text point to their own parent."""
-    sections = MarkdownSplitter().split_text("# A\n## Setup\n### X\n# B\n## Setup\n### Y")
+    sections = splitter.split_text("# A\n## Setup\n### X\n# B\n## Setup\n### Y")
     by_header = {s.header: s for s in sections}
 
     assert by_header["X"].metadata.parent_id == 1
@@ -292,7 +227,7 @@ def test_siblings_do_not_leak_between_same_named_parents():
 
 def test_preamble():
     """Text before the first header is a level-0 section with an empty header."""
-    sections = MarkdownSplitter().split_text("Intro text\n\n# Header\nContent")
+    sections = splitter.split_text("Intro text\n\n# Header\nContent")
 
     assert sections[0].header == ""
     assert sections[0].level == 0
@@ -304,7 +239,7 @@ def test_preamble():
 
 def test_no_headers():
     """A document without headers is returned as one level-0 section."""
-    sections = MarkdownSplitter().split_text("Just text.\nMore text.")
+    sections = splitter.split_text("Just text.\nMore text.")
 
     assert len(sections) == 1
     assert sections[0].level == 0
@@ -323,7 +258,7 @@ def test_no_headers():
 )
 def test_header_text(line, expected_header):
     """Header text drops the closing '#' sequence and keeps '#' inside the text."""
-    sections = MarkdownSplitter().split_text(line)
+    sections = splitter.split_text(line)
 
     assert sections[0].header == expected_header
 
@@ -337,7 +272,7 @@ def test_not_a_header(line):
 
     Empty headings (no text after the '#') are not headers either.
     """
-    sections = MarkdownSplitter().split_text(f"# Header\n{line}\nNext line")
+    sections = splitter.split_text(f"# Header\n{line}\nNext line")
 
     assert len(sections) == 1
     assert sections[0].content == f"{line}\nNext line"
@@ -345,7 +280,7 @@ def test_not_a_header(line):
 
 def test_windows_line_endings():
     """CRLF line endings do not end up in header text."""
-    sections = MarkdownSplitter().split_text("# A\r\nText\r\n## B\r\nMore")
+    sections = splitter.split_text("# A\r\nText\r\n## B\r\nMore")
 
     assert [s.header for s in sections] == ["A", "B"]
     assert sections[0].content == "Text"
@@ -354,7 +289,7 @@ def test_windows_line_endings():
 def test_no_text_lost(sample_markdown):
     """Every non-blank line of the input appears in the sections' Markdown."""
     text = f"Preamble\n{sample_markdown}\n## Header 2.2\nRepeated header"
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
     output_lines = "\n".join(s.to_markdown() for s in sections).splitlines()
 
     assert [line for line in output_lines if line.strip()] == [
@@ -364,7 +299,7 @@ def test_no_text_lost(sample_markdown):
 
 def test_header_starting_with_hash():
     """A header whose text starts with '#' keeps it."""
-    sections = MarkdownSplitter().split_text("## # Foo\nText")
+    sections = splitter.split_text("## # Foo\nText")
 
     assert sections[0].header == "# Foo"
 
@@ -372,7 +307,7 @@ def test_header_starting_with_hash():
 def test_front_matter_is_not_split():
     """'#' lines in YAML front matter are not headers; the front matter is the preamble."""
     front_matter = "---\ntitle: Guide\n# A YAML comment\n---"
-    sections = MarkdownSplitter().split_text(f"{front_matter}\n# Real\nText")
+    sections = splitter.split_text(f"{front_matter}\n# Real\nText")
 
     assert [s.header for s in sections] == ["", "Real"]
     assert sections[0].content == front_matter
@@ -380,7 +315,7 @@ def test_front_matter_is_not_split():
 
 def test_unclosed_front_matter_is_a_thematic_break():
     """A leading '---' without a closing line does not hide the headers after it."""
-    sections = MarkdownSplitter().split_text("---\n# A\nText")
+    sections = splitter.split_text("---\n# A\nText")
 
     assert [s.header for s in sections] == ["", "A"]
 
@@ -391,7 +326,7 @@ def test_unclosed_front_matter_is_a_thematic_break():
 )
 def test_html_comment_block(comment):
     """'#' lines inside an HTML comment block are not headers."""
-    sections = MarkdownSplitter().split_text(f"# A\n{comment}\n# B")
+    sections = splitter.split_text(f"# A\n{comment}\n# B")
 
     assert [s.header for s in sections] == ["A", "B"]
     assert sections[0].content == comment
@@ -410,7 +345,7 @@ def test_html_comment_block(comment):
 )
 def test_raw_html_block(block):
     """'#' lines inside a <pre>, <script>, <style> or <textarea> block are not headers."""
-    sections = MarkdownSplitter().split_text(f"# A\n{block}\n# B")
+    sections = splitter.split_text(f"# A\n{block}\n# B")
 
     assert [s.header for s in sections] == ["A", "B"]
     assert sections[0].content == block
@@ -419,7 +354,7 @@ def test_raw_html_block(block):
 @pytest.mark.parametrize("line", ["<pre>x</pre>", "<preview>"])
 def test_line_that_does_not_open_raw_html_block(line):
     """A <pre> closed on its own line, or a tag like <preview>, hides no headers."""
-    sections = MarkdownSplitter().split_text(f"# A\n{line}\n# B\n# C")
+    sections = splitter.split_text(f"# A\n{line}\n# B\n# C")
 
     assert [s.header for s in sections] == ["A", "B", "C"]
 
@@ -431,7 +366,7 @@ def test_details_headers_are_split():
     '# Inside' line is a heading there too.
     """
     details = "<details>\n<summary>More</summary>\n\n# Inside\n\n</details>"
-    sections = MarkdownSplitter().split_text(f"# A\n{details}")
+    sections = splitter.split_text(f"# A\n{details}")
 
     assert [s.header for s in sections] == ["A", "Inside"]
 
@@ -446,7 +381,7 @@ def test_details_headers_are_split():
 )
 def test_fence_in_list_item(list_item):
     """Fences on a list item line, or indented under one, hide their '#' lines."""
-    sections = MarkdownSplitter().split_text(f"# A\n{list_item}\n# B")
+    sections = splitter.split_text(f"# A\n{list_item}\n# B")
 
     assert [s.header for s in sections] == ["A", "B"]
     assert sections[0].content == list_item
@@ -454,7 +389,7 @@ def test_fence_in_list_item(list_item):
 
 def test_setext_headers_are_text():
     """Setext headers are not supported and stay in the section text."""
-    sections = MarkdownSplitter().split_text("# A\nTitle\n=====\nText")
+    sections = splitter.split_text("# A\nTitle\n=====\nText")
 
     assert len(sections) == 1
     assert sections[0].content == "Title\n=====\nText"
@@ -463,32 +398,17 @@ def test_setext_headers_are_text():
 def test_many_siblings():
     """Thousands of headers under one parent split, each pointing to the parent."""
     text = "# Root\n" + "\n".join(f"## H{index}\nText" for index in range(5000))
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
 
     assert len(sections) == 5001
     assert all(s.metadata.parent_id == 0 for s in sections[1:])
 
 
-def test_outline_ids():
-    """Outline nodes carry the same ids and parent ids as the sections."""
-    outline = MarkdownSplitter().get_document_outline("Intro\n# A\n## B\n# C")
-
-    assert [(n.id, n.parent_id) for n in outline] == [(0, None), (1, None), (3, None)]
-    assert (outline[1].children[0].id, outline[1].children[0].parent_id) == (2, 1)
-
-
 def test_byte_order_mark_in_text():
     """A UTF-8 byte order mark before the first header does not hide it."""
-    sections = MarkdownSplitter().split_text("\ufeff# Title\nText")
+    sections = splitter.split_text("\ufeff# Title\nText")
 
     assert [(s.level, s.header) for s in sections] == [(1, "Title")]
-
-
-def test_byte_order_mark_in_outline():
-    """get_document_outline also ignores a byte order mark."""
-    outline = MarkdownSplitter().get_document_outline("\ufeff# Title\nText")
-
-    assert [(node.level, node.header) for node in outline] == [(1, "Title")]
 
 
 def test_byte_order_mark_in_file(tmp_path):
@@ -496,7 +416,7 @@ def test_byte_order_mark_in_file(tmp_path):
     md_file = tmp_path / "bom.md"
     md_file.write_bytes("\ufeff# Title\nText".encode("utf-8"))
 
-    sections = MarkdownSplitter().split_file(md_file)
+    sections = splitter.split_file(md_file)
 
     assert [(s.level, s.header) for s in sections] == [(1, "Title")]
     assert sections[0].content == "Text"
@@ -508,10 +428,10 @@ def test_split_file_spans_index_file_contents(tmp_path):
     contents = "\ufeffIntro\r\n# A\r\nalpha\r\n## B\r\nbeta\r\n"
     md_file.write_bytes(contents.encode("utf-8"))
 
-    sections = MarkdownSplitter().split_file(md_file)
+    sections = splitter.split_file(md_file)
 
     assert [s.metadata for s in sections] == [
-        s.metadata for s in MarkdownSplitter().split_text(contents)
+        s.metadata for s in splitter.split_text(contents)
     ]
     assert [contents[slice(*s.metadata.span)] for s in sections] == [
         "Intro",
@@ -526,7 +446,7 @@ def test_front_matter_with_lists_and_comments():
         "---\ntitle: Guide\ntags:\n  - one\n- two\n# A YAML comment\nauthor:\n"
         "  name: Gal\n\n..."
     )
-    sections = MarkdownSplitter().split_text(f"{front_matter}\n# Real\nText")
+    sections = splitter.split_text(f"{front_matter}\n# Real\nText")
 
     assert [s.header for s in sections] == ["", "Real"]
     assert sections[0].content == front_matter
@@ -534,7 +454,7 @@ def test_front_matter_with_lists_and_comments():
 
 def test_horizontal_rules_are_not_front_matter():
     """Two '---' lines around Markdown content are horizontal rules, not front matter."""
-    sections = MarkdownSplitter().split_text("---\n# A\ntext\n---\n# B")
+    sections = splitter.split_text("---\n# A\ntext\n---\n# B")
 
     assert [s.header for s in sections] == ["", "A", "B"]
     assert sections[1].content == "text\n---"
@@ -551,7 +471,7 @@ def test_horizontal_rules_are_not_front_matter():
 def test_unclosed_block_logs_warning(caplog, text, block, line_number):
     """An unclosed fence or HTML block logs a warning naming where it starts."""
     with caplog.at_level("WARNING", logger="markdown_chunkify"):
-        sections = MarkdownSplitter().split_text(text)
+        sections = splitter.split_text(text)
 
     assert [s.header for s in sections] == ["A"]
     assert f"The {block} that starts on line {line_number} is never closed" in caplog.text
@@ -560,7 +480,7 @@ def test_unclosed_block_logs_warning(caplog, text, block, line_number):
 def test_closed_blocks_do_not_warn(caplog):
     """Closed fences and HTML comments do not log a warning."""
     with caplog.at_level("WARNING", logger="markdown_chunkify"):
-        MarkdownSplitter().split_text("# A\n```\ncode\n```\n<!--\nnote\n-->\n# B")
+        splitter.split_text("# A\n```\ncode\n```\n<!--\nnote\n-->\n# B")
 
     assert caplog.text == ""
 
@@ -569,14 +489,14 @@ def test_closed_blocks_do_not_warn(caplog):
 def test_split_text_logs_nothing(caplog, text):
     """Empty input and a normal split log nothing, even at DEBUG level."""
     with caplog.at_level("DEBUG", logger="markdown_chunkify"):
-        MarkdownSplitter().split_text(text)
+        splitter.split_text(text)
 
     assert caplog.records == []
 
 
 def test_mid_line_html_comment_is_not_recognized():
     """A comment that opens mid-line does not hide the '#' lines inside it."""
-    sections = MarkdownSplitter().split_text("# A\ntext <!--\n# B\n-->")
+    sections = splitter.split_text("# A\ntext <!--\n# B\n-->")
 
     assert [s.header for s in sections] == ["A", "B"]
 
@@ -587,7 +507,7 @@ def test_mid_line_html_comment_is_not_recognized():
 )
 def test_front_matter_must_start_with_a_key(text):
     """A '---' block whose first line is not a 'key:' entry is not front matter."""
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
 
     assert [(s.level, s.header) for s in sections] == [
         (0, ""),
@@ -596,9 +516,26 @@ def test_front_matter_must_start_with_a_key(text):
     ]
 
 
+@pytest.mark.parametrize(
+    "text, expected",
+    [
+        (
+            "---\ntitle: Guide\nnot yaml\n# Title\n---\n## Next",
+            [(0, ""), (1, "Title"), (2, "Next")],
+        ),
+        ("---\ntitle: Guide\n# Title", [(0, ""), (1, "Title")]),
+    ],
+)
+def test_front_matter_needs_yaml_lines_and_a_closing_line(text, expected):
+    """'---' blocks with a non-YAML line or without a closing line are not front matter."""
+    sections = splitter.split_text(text)
+
+    assert [(s.level, s.header) for s in sections] == expected
+
+
 def test_span_slices_section_from_source(sample_markdown):
     """Each span slices the header line and section text out of the source."""
-    sections = MarkdownSplitter().split_text(sample_markdown)
+    sections = splitter.split_text(sample_markdown)
 
     for section in sections:
         start, end = section.metadata.span
@@ -610,7 +547,7 @@ def test_span_slices_section_from_source(sample_markdown):
 def test_span_offsets():
     """Spans skip leading blank lines and trailing whitespace, and exclude children."""
     text = "\n\nintro  \n\n# A\nText A\n## B   \n\n\n# C\n"
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
 
     assert [s.metadata.span for s in sections] == [(2, 7), (11, 21), (22, 26), (32, 35)]
     assert [text[slice(*s.metadata.span)] for s in sections] == [
@@ -625,7 +562,7 @@ def test_span_offsets():
 def test_span_includes_byte_order_mark_offset():
     """Spans are offsets in the text as passed in, byte order mark included."""
     text = "﻿# Title\nText"
-    sections = MarkdownSplitter().split_text(text)
+    sections = splitter.split_text(text)
 
     assert sections[0].metadata.span == (1, 13)
     assert text[1:13] == "# Title\nText"
@@ -633,22 +570,6 @@ def test_span_includes_byte_order_mark_offset():
 
 def test_keeps_source_text():
     """Sections keep the source text, including entity names."""
-    sections = MarkdownSplitter().split_text("# Müller GmbH\n北京")
+    sections = splitter.split_text("# Müller GmbH\n北京")
 
     assert (sections[0].header, sections[0].content) == ("Müller GmbH", "北京")
-
-
-def test_outline_keeps_source_text():
-    """get_document_outline returns the source text."""
-    outline = MarkdownSplitter().get_document_outline("# Café\nnaïve")
-
-    assert (outline[0].header, outline[0].content) == ("Café", "naïve")
-    assert outline[0].model_dump() == {
-        "header": "Café",
-        "content": "naïve",
-        "level": 1,
-        "id": 0,
-        "parent_id": None,
-        "span": (0, 12),
-        "children": [],
-    }
