@@ -59,8 +59,8 @@ class MarkdownSplitter(BaseSplitter):
         - Returns text before the first header as a level-0 section with an empty header
         - Supports headers up to level 6, or a lower limit set with `max_level`
         - Optionally caps each sibling list with `max_siblings`
-        - Transliterates headers and text to ASCII by default ('Café' -> 'Cafe'), keeping
-          spans on the source text
+        - Optionally transliterates headers and text to ASCII ('Café' -> 'Cafe') with
+          `normalize_unicode=True`, keeping spans on the source text
 
     Limitations:
         - Only ATX headers ('#' to '######') are recognized. Setext headers, underlined
@@ -436,7 +436,7 @@ class MarkdownSplitter(BaseSplitter):
 
         return sections
 
-    def split_text(self, text: str, normalize_unicode: bool = True) -> List[Section]:
+    def split_text(self, text: str, normalize_unicode: bool = False) -> List[Section]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Processes a Markdown document and splits it into sections based on
@@ -450,8 +450,9 @@ class MarkdownSplitter(BaseSplitter):
                        followed by a space (e.g., "# Header 1", "## Header 2").
             normalize_unicode (bool): Transliterate headers and text to ASCII with
                 anyascii ('Café' -> 'Cafe', '—' -> '-'). This also rewrites non-Latin
-                scripts ('Привет' -> 'Privet'), emoji and code. Headers are found before
-                the text is changed, so spans stay offsets in `text`. Defaults to True.
+                scripts ('Привет' -> 'Privet'), emoji, code and entity names ('Müller' ->
+                'Muller'). Headers are found before the text is changed, so spans stay
+                offsets in `text`. Defaults to False.
 
         Returns:
             List[Section]: A list of Section objects in document order, each containing:
@@ -500,7 +501,7 @@ class MarkdownSplitter(BaseSplitter):
         self,
         filepath: Union[str, Path],
         encoding: str = "utf-8-sig",
-        normalize_unicode: bool = True,
+        normalize_unicode: bool = False,
     ) -> List[Section]:
         """Split a Markdown file into sections, as `split_text` does.
 
@@ -509,7 +510,7 @@ class MarkdownSplitter(BaseSplitter):
             encoding (str): The file encoding. The default, 'utf-8-sig', reads UTF-8
                 files with or without a byte order mark.
             normalize_unicode (bool): Transliterate headers and text to ASCII. See
-                `split_text`. Defaults to True.
+                `split_text`. Defaults to False.
         """
         path = Path(filepath)
         if not path.exists():

@@ -2,7 +2,7 @@
 
 # MarkdownSplitter
 
-A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, transliterates Unicode to ASCII, and can optionally convert PDFs to Markdown.
+A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, tracks parent-child and sibling relationships between sections, can transliterate Unicode to ASCII, and can optionally convert PDFs to Markdown.
 
 ## Features
 
@@ -11,7 +11,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Tracks parent headers and siblings for each section. Headers with the same text are kept as separate sections. `MarkdownSplitter(max_siblings=10)` lists only the 10 nearest siblings
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written, and `metadata.char_count` is its length
-- Transliterates headers and text to ASCII by default (`Café` becomes `Cafe`), with `normalize_unicode=False` to keep the source text
+- Keeps the source text by default. `normalize_unicode=True` transliterates headers and text to ASCII (`Café` becomes `Cafe`)
 - Optional extra: PDF to Markdown conversion (`pdf`)
 
 ## Installation
@@ -70,15 +70,17 @@ markdown_text = PyMuPDFMParser.to_markdown(
 
 ### Unicode normalization
 
-`split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents and siblings use the transliterated headers.
+With `normalize_unicode=True`, `split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents and siblings use the transliterated headers. It is off by default.
 ```python
 text = "# Café\nnaïve — “quoted”"
 
-splitter.split_text(text)[0].section_text  # 'naive - "quoted"'
-splitter.split_text(text, normalize_unicode=False)[0].section_text  # 'naïve — “quoted”'
+splitter.split_text(text)[0].section_text  # 'naïve — “quoted”'
+splitter.split_text(text, normalize_unicode=True)[0].section_text  # 'naive - "quoted"'
 ```
 
-Transliteration also rewrites text that has no Latin form: `Привет` becomes `Privet`, `北京` becomes `BeiJing` and emoji become names such as `:grinning:`. Code blocks are transliterated too, so `x = "é"` becomes `x = "e"`. Pass `normalize_unicode=False` for documents where that matters.
+Transliteration also rewrites text that has no Latin form: `Привет` becomes `Privet`, `北京` becomes `BeiJing` and emoji become names such as `:grinning:`. Code blocks are transliterated too, so `x = "é"` becomes `x = "e"`.
+
+Leave it off when you extract entities for a knowledge graph. Transliteration changes entity names (`Müller GmbH` becomes `Muller GmbH`), so entities extracted from normalized text no longer match the source document or other sources that keep the original spelling. It suits pipelines that need ASCII-only text, such as a search index with an ASCII tokenizer.
 
 Headers are found before the text is transliterated, so spans still point at the source text and a fullwidth `＃` does not become a header. `metadata.normalized` is `True` for sections whose header or text changed. `get_document_outline` always returns the source text.
 

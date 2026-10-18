@@ -493,9 +493,18 @@ def test_span_includes_byte_order_mark_offset(splitter):
     assert text[1:13] == "# Title\nText"
 
 
-def test_normalizes_unicode_by_default(splitter):
+def test_keeps_source_text_by_default(splitter):
+    """By default, sections keep the source text, including entity names."""
+    sections = splitter.split_text("# Müller GmbH\n北京")
+
+    assert (sections[0].section_header, sections[0].section_text) == ("Müller GmbH", "北京")
+    assert not sections[0].metadata.normalized
+
+
+def test_normalize_unicode_enabled(splitter):
     """Headers, text, parents and siblings are transliterated to ASCII."""
-    sections = splitter.split_text("# Café\nnaïve — “quoted”\n## Straße\nx\n## Ñu\ny")
+    text = "# Café\nnaïve — “quoted”\n## Straße\nx\n## Ñu\ny"
+    sections = splitter.split_text(text, normalize_unicode=True)
 
     assert [s.section_header for s in sections] == ["Cafe", "Strasse", "Nu"]
     assert sections[0].section_text == 'naive - "quoted"'
@@ -520,8 +529,8 @@ def test_normalize_unicode_disabled(splitter):
 def test_normalized_spans_point_at_source(splitter):
     """Normalization keeps spans and character counts on the source text."""
     text = "Préface\n# Café\nStraße straße\n## B\nb"
-    normalized = splitter.split_text(text)
-    source = splitter.split_text(text, normalize_unicode=False)
+    normalized = splitter.split_text(text, normalize_unicode=True)
+    source = splitter.split_text(text)
 
     assert [s.metadata.span for s in normalized] == [s.metadata.span for s in source]
     assert [s.metadata.char_count for s in normalized] == [
@@ -532,14 +541,15 @@ def test_normalized_spans_point_at_source(splitter):
 
 def test_normalized_flag_marks_changed_sections(splitter):
     """Only sections whose header or text changed are marked as normalized."""
-    sections = splitter.split_text("# Plain\ntext\n# Café\ntext\n# Plain 2\nnaïve")
+    text = "# Plain\ntext\n# Café\ntext\n# Plain 2\nnaïve"
+    sections = splitter.split_text(text, normalize_unicode=True)
 
     assert [s.metadata.normalized for s in sections] == [False, True, True]
 
 
 def test_fullwidth_hash_does_not_become_a_header(splitter):
     """Headers are found before normalization, so a fullwidth '＃' stays text."""
-    sections = splitter.split_text("# Title\n＃ Not a header")
+    sections = splitter.split_text("# Title\n＃ Not a header", normalize_unicode=True)
 
     assert [s.section_header for s in sections] == ["Title"]
     assert sections[0].section_text == "# Not a header"
@@ -554,12 +564,12 @@ def test_outline_keeps_source_text(splitter):
 
 
 def test_split_file_normalize_unicode(splitter, tmp_path):
-    """split_file normalizes by default and passes normalize_unicode through."""
+    """split_file keeps the source text by default and passes normalize_unicode through."""
     md_file = tmp_path / "unicode.md"
     md_file.write_text("# Café\nnaïve", encoding="utf-8")
 
-    normalized = splitter.split_file(md_file)
-    source = splitter.split_file(md_file, normalize_unicode=False)
+    normalized = splitter.split_file(md_file, normalize_unicode=True)
+    source = splitter.split_file(md_file)
 
     assert (normalized[0].section_header, normalized[0].section_text) == ("Cafe", "naive")
     assert (source[0].section_header, source[0].section_text) == ("Café", "naïve")
