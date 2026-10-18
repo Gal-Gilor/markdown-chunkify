@@ -328,7 +328,7 @@ class MarkdownSplitter(BaseSplitter):
         offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
         text = text[offset:]
         if not text.strip():
-            logger.warning("`get_document_outline` received empty text input.")
+            logger.warning("Received empty text input.")
             return []
 
         headers = self._find_headers(text)
@@ -485,10 +485,6 @@ class MarkdownSplitter(BaseSplitter):
             >>> sections[2].metadata.parent_id
             0
         """
-        if not text.removeprefix(_BYTE_ORDER_MARK).strip():
-            logger.warning("`split_text` received empty text input.")
-            return []
-
         outline = self._build_outline(text, normalize_unicode)
         sections = self._create_sections_from_outline(outline)
 
@@ -516,20 +512,12 @@ class MarkdownSplitter(BaseSplitter):
         """
         path = Path(filepath)
         if not path.exists():
-            error_message = f"Unable to find the Markdown in the specified location: {path}"
-            logger.error(error_message)
-            raise FileNotFoundError(error_message)
+            raise FileNotFoundError(
+                f"Unable to find the Markdown in the specified location: {path}"
+            )
 
         if path.is_dir():
-            error_message = f"The provided path is a directory: {path}"
-            logger.error(error_message)
-            raise IsADirectoryError(error_message)
+            raise IsADirectoryError(f"The provided path is a directory: {path}")
 
-        try:
-            with path.open("r", encoding=encoding, newline="") as f:
-                return self.split_text(f.read(), normalize_unicode=normalize_unicode)
-        except Exception as e:
-            logger.error(
-                f"Failed to split the Markdown file: {path}. Error: {str(e)}", exc_info=True
-            )
-            raise
+        with path.open("r", encoding=encoding, newline="") as f:
+            return self.split_text(f.read(), normalize_unicode=normalize_unicode)
