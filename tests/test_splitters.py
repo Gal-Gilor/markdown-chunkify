@@ -546,6 +546,15 @@ def test_closed_blocks_do_not_warn(splitter, caplog):
     assert caplog.text == ""
 
 
+@pytest.mark.parametrize("text", ["", " \n\t", "# A\ntext\n## B"])
+def test_split_text_logs_nothing(splitter, caplog, text):
+    """Empty input and a normal split log nothing, even at DEBUG level."""
+    with caplog.at_level("DEBUG", logger="markdown_chunkify"):
+        splitter.split_text(text)
+
+    assert caplog.records == []
+
+
 def test_mid_line_html_comment_is_not_recognized(splitter):
     """A comment that opens mid-line does not hide the '#' lines inside it."""
     sections = splitter.split_text("# A\ntext <!--\n# B\n-->")
