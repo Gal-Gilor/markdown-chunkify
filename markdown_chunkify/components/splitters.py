@@ -2,8 +2,6 @@ import logging
 import re
 from pathlib import Path
 
-from anyascii import anyascii
-
 from markdown_chunkify.core.interfaces import BaseSplitter
 from markdown_chunkify.core.models import OutlineNode
 from markdown_chunkify.core.models import Section
@@ -60,8 +58,6 @@ class MarkdownSplitter(BaseSplitter):
         - Keeps section text exactly as written, including code blocks
         - Returns text before the first header as a level-0 section with an empty header
         - Supports headers up to level 6, or a lower limit set with `max_level`
-        - Optionally transliterates headers and text to ASCII ('Café' -> 'Cafe') with
-          `normalize_unicode=True`, keeping spans on the source text
 
     Limitations:
         - Only ATX headers ('#' to '######') are recognized. Setext headers, underlined
@@ -256,9 +252,6 @@ class MarkdownSplitter(BaseSplitter):
                 the headers nested under it in `children`. Text before the first header
                 is the first node, with level 0 and an empty header.
 
-        The header and content are the source text. Unicode normalization only applies
-        to the sections returned by `split_text` and `split_file`.
-
         Example:
             >>> text = '''
             ... # Header 1
@@ -329,7 +322,6 @@ class MarkdownSplitter(BaseSplitter):
     def _create_sections_from_outline(
         self,
         outline: list[OutlineNode],
-        normalize_unicode: bool,
         parent_headers: dict[str, str] | None = None,
     ) -> list[Section]:
         """Convert a document outline into a flat list of Section objects.
@@ -339,9 +331,6 @@ class MarkdownSplitter(BaseSplitter):
 
         Args:
             outline (list[OutlineNode]): Nodes as returned by `get_document_outline`.
-            normalize_unicode (bool): Transliterate each header and content to ASCII.
-                The parents use the transliterated headers, and spans stay offsets in
-                the source text.
             parent_headers (dict[str, str] | None): A dictionary mapping the levels of the
                 ancestor headers to their text. Keys are in the format 'h1', 'h2', etc.
                 Defaults to None, which means the nodes have no ancestors.
@@ -358,35 +347,26 @@ class MarkdownSplitter(BaseSplitter):
         sections = []
 
         for node in outline:
-            header, content = node.header, node.content
-            if normalize_unicode:
-                header, content = anyascii(header), anyascii(content)
-
             sections.append(
                 Section(
-                    section_header=header,
-                    section_text=content,
+                    section_header=node.header,
+                    section_text=node.content,
                     header_level=node.level,
                     metadata=SectionMetadata(
                         id=node.id,
                         parent_id=node.parent_id,
                         parents=dict(parent_headers),
-                        normalized=header != node.header or content != node.content,
                         span=node.span,
                     ),
                 )
             )
 
-            child_parents = {**parent_headers, f"h{node.level}": header}
-            sections.extend(
-                self._create_sections_from_outline(
-                    node.children, normalize_unicode, child_parents
-                )
-            )
+            child_parents = {**parent_headers, f"h{node.level}": node.header}
+            sections.extend(self._create_sections_from_outline(node.children, child_parents))
 
         return sections
 
-    def split_text(self, text: str, normalize_unicode: bool = False) -> list[Section]:
+    def split_text(self, text: str) -> list[Section]:
         """Split Markdown text into sections while maintaining header hierarchy.
 
         Processes a Markdown document and splits it into sections based on
@@ -398,11 +378,6 @@ class MarkdownSplitter(BaseSplitter):
         Args:
             text (str): The Markdown text to split. Should contain headers marked with '#'
                        followed by a space (e.g., "# Header 1", "## Header 2").
-            normalize_unicode (bool): Transliterate headers and text to ASCII with
-                anyascii ('Café' -> 'Cafe', '—' -> '-'). This also rewrites non-Latin
-                scripts ('Привет' -> 'Privet'), emoji, code and entity names ('Müller' ->
-                'Muller'). Headers are found before the text is changed, so spans stay
-                offsets in `text`. Defaults to False.
 
         Returns:
             list[Section]: A list of Section objects in document order, each containing:
@@ -419,7 +394,6 @@ class MarkdownSplitter(BaseSplitter):
                       written
                     - char_count (int): The number of characters in the span, computed
                       from it
-                    - normalized (bool): Whether normalization changed the header or text
                 Text before the first header, or a document without headers, is returned
                 as a section with level 0 and an empty header.
 
@@ -441,17 +415,12 @@ class MarkdownSplitter(BaseSplitter):
             0
         """
         outline = self.get_document_outline(text)
-        sections = self._create_sections_from_outline(outline, normalize_unicode)
+        sections = self._create_sections_from_outline(outline)
 
         logger.info(f"Successfully split the Markdown into {len(sections)} sections.")
         return sections
 
-    def split_file(
-        self,
-        filepath: str | Path,
-        encoding: str = "utf-8",
-        normalize_unicode: bool = False,
-    ) -> list[Section]:
+    def split_file(self, filepath: str | Path, encoding: str = "utf-8") -> list[Section]:
         """Split a Markdown file into sections, as `split_text` does.
 
         Spans are character offsets into the file's contents as decoded with
@@ -462,8 +431,6 @@ class MarkdownSplitter(BaseSplitter):
             encoding (str): The file encoding. The default, 'utf-8', keeps a byte
                 order mark in the text, and spans count it. Passing 'utf-8-sig'
                 removes it before splitting, so offsets start after it.
-            normalize_unicode (bool): Transliterate headers and text to ASCII. See
-                `split_text`. Defaults to False.
         """
         path = Path(filepath)
         if not path.exists():
@@ -475,4 +442,4 @@ class MarkdownSplitter(BaseSplitter):
             raise IsADirectoryError(f"The provided path is a directory: {path}")
 
         with path.open("r", encoding=encoding, newline="") as f:
-            return self.split_text(f.read(), normalize_unicode=normalize_unicode)
+            return self.split_text(f.read())
