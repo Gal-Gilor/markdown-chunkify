@@ -20,9 +20,10 @@ logger = logging.getLogger(__name__)
 MAX_HEADER_LEVEL = 6
 
 # ATX header: up to 3 spaces of indent, 1-6 '#', then optionally whitespace and the
-# header text, and an optional closing sequence of '#'. A header without text is not a
-# header, so its line stays in the section text.
-_HEADER_PATTERN = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*?))??(?:[ \t]+#+)?[ \t]*$")
+# rest of the line. `_header_text` removes the closing '#' sequence and trailing
+# whitespace. The pattern has no lazy or optional trailing part, so matching is linear.
+# A header without text is not a header, so its line stays in the section text.
+_HEADER_PATTERN = re.compile(r"^ {0,3}(#{1,6})(?:[ \t]+(.*))?$")
 # Opening code fence: 3+ backticks or tildes, at any indentation and optionally after a
 # list marker, so fences inside list items are found. A backtick fence's info string
 # cannot contain backticks.
@@ -76,6 +77,15 @@ def _front_matter_line_count(lines: list[str]) -> int:
             return 0
 
     return 0
+
+
+def _header_text(text: str) -> str:
+    """Remove trailing spaces and tabs and an optional closing '#' sequence."""
+    text = text.rstrip(" \t")
+    without_closing = text.rstrip("#")
+    if not without_closing or without_closing[-1] in " \t":
+        return without_closing.rstrip(" \t")
+    return text
 
 
 class _Header(NamedTuple):
@@ -141,9 +151,9 @@ def _find_headers(text: str, max_level: int) -> list[_Header]:
             continue
 
         header_match = _HEADER_PATTERN.match(line)
-        if header_match and header_match.group(2) and len(header_match.group(1)) <= max_level:
-            level = len(header_match.group(1))
-            headers.append(_Header(line_start, position, level, header_match.group(2)))
+        if header_match and (level := len(header_match.group(1))) <= max_level:
+            if header_text := _header_text(header_match.group(2) or ""):
+                headers.append(_Header(line_start, position, level, header_text))
 
     if fence or html_block_end:
         logger.warning(
@@ -248,7 +258,7 @@ class MarkdownSplitter:
             )
 
         # Sections on the path from the top level to the current header
-        stack = []
+        stack: list[Section] = []
 
         for i, header in enumerate(headers):
             content_end = headers[i + 1].line_start if i + 1 < len(headers) else len(text)

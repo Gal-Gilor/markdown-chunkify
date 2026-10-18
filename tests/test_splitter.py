@@ -304,6 +304,14 @@ def test_header_starting_with_hash():
     assert sections[0].header == "# Foo"
 
 
+def test_long_whitespace_run_in_header():
+    """A header line with a long run of spaces and tabs is parsed in linear time."""
+    sections = splitter.split_text("# a" + " \t" * 500_000 + "b")
+
+    assert len(sections) == 1
+    assert sections[0].header == "a" + " \t" * 500_000 + "b"
+
+
 def test_front_matter_is_not_split():
     """'#' lines in YAML front matter are not headers; the front matter is the preamble."""
     front_matter = "---\ntitle: Guide\n# A YAML comment\n---"

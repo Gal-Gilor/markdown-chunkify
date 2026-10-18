@@ -108,6 +108,7 @@ NFKC also folds superscripts and subscripts, so `x²` becomes `x2`. It leaves so
 - Headers inside `<details>` are split, as GitHub renders Markdown after a blank line inside `<details>`. The `<details>` and `</details>` tags stay in the text of the sections around them.
 - A header with no text (`#`, `## ##`, or only whitespace after the `#`) is kept as text of the enclosing section, not an empty section. CommonMark renders it as an empty heading.
 - A document that starts with `---` is treated as having YAML front matter only if the line after it is a `key:` entry and every line up to the next `---` or `...` looks like YAML (`key: value`, `- item`, indented lines, comments or blank lines). Otherwise the `---` is a horizontal rule and the headers after it are split as usual.
+- Sections have no size limit. A document without headers is returned as one section and a long section stays whole, so split long sections before embedding them.
 
 ## Data Models
 
