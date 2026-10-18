@@ -2,8 +2,8 @@
 
 Each section gets an id and the id of its parent section, so the header hierarchy can
 be rebuilt as a tree. Lines inside fenced code blocks, HTML blocks and YAML front
-matter are not headers. See the README's Limitations section for the full list of
-limitations.
+matter are not headers. The README's Limitations section lists the cases that are not
+supported.
 """
 
 import logging
@@ -157,8 +157,10 @@ def _find_headers(text: str, max_level: int) -> list[_Header]:
 
 
 def _trimmed_range(text: str, start: int, end: int) -> tuple[int, int]:
-    """Return the range of text[start:end] without leading blank lines and trailing
-    whitespace, keeping the first line's indentation."""
+    """Return the range of text[start:end] minus leading blank lines and trailing whitespace.
+
+    The first line's indentation is kept.
+    """
     end = start + len(text[start:end].rstrip())
     if match := _LEADING_BLANK_LINES_PATTERN.match(text, start, end):
         start = match.end()
