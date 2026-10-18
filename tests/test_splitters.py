@@ -163,7 +163,17 @@ def test_breadcrumb_follows_normalization(splitter):
 def test_parents_reject_none():
     """A None parent header fails validation instead of breaking breadcrumb()."""
     with pytest.raises(ValidationError):
-        SectionMetadata(parents={"h1": None})
+        SectionMetadata(parents={"h1": None}, span=(0, 0))
+
+
+def test_char_count_is_derived_from_span():
+    """char_count is computed from span, serialized, and cannot be set separately."""
+    metadata = SectionMetadata(span=(2, 9))
+
+    assert metadata.char_count == 7
+    assert metadata.model_dump()["char_count"] == 7
+    assert SectionMetadata.model_validate(metadata.model_dump()) == metadata
+    assert SectionMetadata(span=(0, 10), char_count=3).char_count == 10
 
 
 def test_code_block_kept_verbatim(splitter):
@@ -493,6 +503,24 @@ def test_byte_order_mark_in_file(splitter, tmp_path):
 
     assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
     assert sections[0].section_text == "Text"
+
+
+def test_split_file_spans_index_file_contents(splitter, tmp_path):
+    """split_file spans index into the file's contents, BOM and CRLF included."""
+    md_file = tmp_path / "crlf.md"
+    md_file.write_bytes("\ufeffIntro\r\n# A\r\nalpha\r\n## B\r\nbeta\r\n".encode("utf-8"))
+    contents = md_file.read_text(encoding="utf-8", newline="")
+
+    sections = splitter.split_file(md_file)
+
+    assert [s.metadata for s in sections] == [
+        s.metadata for s in splitter.split_text(contents)
+    ]
+    assert [contents[slice(*s.metadata.span)] for s in sections] == [
+        "Intro",
+        "# A\r\nalpha",
+        "## B\r\nbeta",
+    ]
 
 
 def test_front_matter_with_lists_and_comments(splitter):

@@ -420,7 +420,6 @@ class MarkdownSplitter(BaseSplitter):
                         parents=dict(parent_headers),
                         normalized=node.get("normalized", False),
                         span=node["span"],
-                        char_count=node["span"][1] - node["span"][0],
                     ),
                 )
             )
@@ -463,7 +462,8 @@ class MarkdownSplitter(BaseSplitter):
                     - span (tuple[int, int]): The start and end offsets of the header line
                       and section text in `text`, so `text[start:end]` is the section as
                       written
-                    - char_count (int): The number of characters in the span
+                    - char_count (int): The number of characters in the span, computed
+                      from it
                     - normalized (bool): Whether normalization changed the header or text
                 Text before the first header, or a document without headers, is returned
                 as a section with level 0 and an empty header.
@@ -498,15 +498,19 @@ class MarkdownSplitter(BaseSplitter):
     def split_file(
         self,
         filepath: str | Path,
-        encoding: str = "utf-8-sig",
+        encoding: str = "utf-8",
         normalize_unicode: bool = False,
     ) -> list[Section]:
         """Split a Markdown file into sections, as `split_text` does.
 
+        Spans are character offsets into the file's contents as decoded with
+        `encoding`, with line endings kept as written.
+
         Args:
             filepath (str | Path): The path to the Markdown file.
-            encoding (str): The file encoding. The default, 'utf-8-sig', reads UTF-8
-                files with or without a byte order mark.
+            encoding (str): The file encoding. The default, 'utf-8', keeps a byte
+                order mark in the text, and spans count it. Passing 'utf-8-sig'
+                removes it before splitting, so offsets start after it.
             normalize_unicode (bool): Transliterate headers and text to ASCII. See
                 `split_text`. Defaults to False.
         """
@@ -522,7 +526,7 @@ class MarkdownSplitter(BaseSplitter):
             raise IsADirectoryError(error_message)
 
         try:
-            with path.open("r", encoding=encoding) as f:
+            with path.open("r", encoding=encoding, newline="") as f:
                 return self.split_text(f.read(), normalize_unicode=normalize_unicode)
         except Exception as e:
             logger.error(

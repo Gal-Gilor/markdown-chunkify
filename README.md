@@ -11,7 +11,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Gives each section an id and its parent section's id, so the header hierarchy can be rebuilt as a tree or loaded into a graph. Headers with the same text are kept as separate sections
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
-- Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written, and `metadata.char_count` is its length
+- Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written. `metadata.char_count` is the length of that span, not of `section_text` or `to_markdown()`
 - Keeps the source text by default. `normalize_unicode=True` transliterates headers and text to ASCII (`Café` becomes `Cafe`)
 - Optional extra: PDF to Markdown conversion (`pdf`)
 
@@ -172,12 +172,12 @@ class SectionMetadata(BaseModel):
     # Parent headers by level, such as {"h1": "Guide", "h2": "Install"}
     parents: dict[str, str]
     # Start (inclusive) and end (exclusive) offsets in the source text
-    span: tuple[int, int] | None
-    # Number of characters in the span
-    char_count: int | None
+    span: tuple[int, int]
+    # Number of characters in the span, computed from it
+    char_count: int
 ```
 
-The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count characters in the string passed to `split_text`, including a byte order mark. A normalized section keeps the span and character count of the source text, so `text[start:end]` returns the text before transliteration.
+The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written. A normalized section keeps the span and character count of the source text, so `text[start:end]` returns the text before transliteration.
 
 ### Methods
 
