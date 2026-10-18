@@ -18,9 +18,9 @@ def test_single_header():
     text = "# Header\nContent"
     sections = split_text(text)
     assert len(sections) == 1
-    assert sections[0].section_header == "Header"
-    assert sections[0].section_text == "Content"
-    assert sections[0].header_level == 1
+    assert sections[0].header == "Header"
+    assert sections[0].content == "Content"
+    assert sections[0].level == 1
 
 
 def test_multiple_headers_same_level():
@@ -28,15 +28,15 @@ def test_multiple_headers_same_level():
     text = "# H1\nC1\n# H2\nC2"
     sections = split_text(text)
     assert len(sections) == 2
-    assert [s.section_header for s in sections] == ["H1", "H2"]
-    assert [s.section_text for s in sections] == ["C1", "C2"]
+    assert [s.header for s in sections] == ["H1", "H2"]
+    assert [s.content for s in sections] == ["C1", "C2"]
 
 
 def test_nested_headers(nested_markdown):
     """Test nested headers in a sample markdown text."""
     sections = split_text(nested_markdown)
     assert len(sections) == 4
-    assert [s.header_level for s in sections] == [1, 2, 3, 2]
+    assert [s.level for s in sections] == [1, 2, 3, 2]
     assert sections[2].metadata.parents["h1"] == "Main"
     assert sections[2].metadata.parents["h2"] == "Sub"
 
@@ -54,8 +54,8 @@ def test_sibling_headers(sample_markdown):
     sections = split_text(sample_markdown)
     header_2 = sections[2]
 
-    assert header_2.section_header == "Header 2"
-    assert [s.section_header for s in sections if s.metadata.parent_id == 2] == [
+    assert header_2.header == "Header 2"
+    assert [s.header for s in sections if s.metadata.parent_id == 2] == [
         "Header 2.1",
         "Header 2.2",
     ]
@@ -70,10 +70,8 @@ def test_ids_are_document_order(sample_markdown):
     for section in sections:
         if section.metadata.parent_id is not None:
             parent = sections[section.metadata.parent_id]
-            assert parent.header_level < section.header_level
-            assert section.metadata.parents[f"h{parent.header_level}"] == (
-                parent.section_header
-            )
+            assert parent.level < section.level
+            assert section.metadata.parents[f"h{parent.level}"] == parent.header
 
 
 def test_file_operations(tmp_path):
@@ -83,7 +81,7 @@ def test_file_operations(tmp_path):
 
     sections = split_file(md_file)
     assert len(sections) == 1
-    assert sections[0].section_header == "Test"
+    assert sections[0].header == "Test"
 
 
 def test_file_not_found():
@@ -98,11 +96,11 @@ def test_is_directory(tmp_path):
         split_file(tmp_path)
 
 
-def test_header_level_counting():
+def test_level_counting():
     """Test header level counting in a sample markdown text."""
     text = "### Header"
     sections = split_text(text)
-    assert sections[0].header_level == 3
+    assert sections[0].level == 3
 
 
 def test_metadata_structure():
@@ -144,17 +142,38 @@ def test_breadcrumb_preamble_and_skipped_levels():
 def test_parents_reject_none():
     """A None parent header fails validation instead of breaking breadcrumb()."""
     with pytest.raises(ValidationError):
-        SectionMetadata(parents={"h1": None}, span=(0, 0))
+        SectionMetadata(id=0, parents={"h1": None}, span=(0, 0))
+
+
+def test_metadata_requires_id():
+    """SectionMetadata fails validation without an id."""
+    with pytest.raises(ValidationError):
+        SectionMetadata(span=(0, 0))
+
+
+def test_models_are_frozen():
+    """Sections, their metadata and outline nodes cannot be changed after creation."""
+    section = split_text("# A\nText")[0]
+
+    with pytest.raises(ValidationError):
+        section.content = "x"
+    with pytest.raises(ValidationError):
+        section.metadata.id = 1
+    with pytest.raises(ValidationError):
+        get_document_outline("# A")[0].header = "x"
+
+    changed = section.model_copy(update={"content": "x"})
+    assert (changed.content, section.content) == ("x", "Text")
 
 
 def test_char_count_is_derived_from_span():
     """char_count is computed from span, serialized, and cannot be set separately."""
-    metadata = SectionMetadata(span=(2, 9))
+    metadata = SectionMetadata(id=0, span=(2, 9))
 
     assert metadata.char_count == 7
     assert metadata.model_dump()["char_count"] == 7
     assert SectionMetadata.model_validate(metadata.model_dump()) == metadata
-    assert SectionMetadata(span=(0, 10), char_count=3).char_count == 10
+    assert SectionMetadata(id=0, span=(0, 10), char_count=3).char_count == 10
 
 
 def test_code_block_kept_verbatim():
@@ -163,7 +182,7 @@ def test_code_block_kept_verbatim():
     sections = split_text(f"# Header\n{code_block}\nAfter")
 
     assert len(sections) == 1
-    assert sections[0].section_text == f"{code_block}\nAfter"
+    assert sections[0].content == f"{code_block}\nAfter"
 
 
 @pytest.mark.parametrize(
@@ -179,8 +198,8 @@ def test_fence_variants(code_block):
     """Tilde, longer, and indented fences hide their content from header matching."""
     sections = split_text(f"# Header\n{code_block}\n# Next")
 
-    assert [s.section_header for s in sections] == ["Header", "Next"]
-    assert sections[0].section_text == code_block
+    assert [s.header for s in sections] == ["Header", "Next"]
+    assert sections[0].content == code_block
 
 
 def test_unclosed_fence_runs_to_end():
@@ -188,15 +207,15 @@ def test_unclosed_fence_runs_to_end():
     sections = split_text("# Header\n```\n# Not a header\ntext")
 
     assert len(sections) == 1
-    assert sections[0].section_text == "```\n# Not a header\ntext"
+    assert sections[0].content == "```\n# Not a header\ntext"
 
 
-def test_header_levels_up_to_six():
+def test_levels_up_to_six():
     """Headers from h1 to h6 split, and parents only list levels that exist."""
     text = "\n".join(f"{'#' * level} H{level}" for level in range(1, 7))
     sections = split_text(text)
 
-    assert [s.header_level for s in sections] == [1, 2, 3, 4, 5, 6]
+    assert [s.level for s in sections] == [1, 2, 3, 4, 5, 6]
     expected_parents = {f"h{level}": f"H{level}" for level in range(1, 6)}
     assert sections[-1].metadata.parents == expected_parents
 
@@ -206,15 +225,15 @@ def test_seven_hashes_is_text():
     sections = split_text("# Header\n####### Not a header")
 
     assert len(sections) == 1
-    assert sections[0].section_text == "####### Not a header"
+    assert sections[0].content == "####### Not a header"
 
 
 def test_max_level():
     """Headers deeper than max_level stay in the enclosing section's text."""
     sections = split_text("# A\n## B\n### C\nText", max_level=2)
 
-    assert [s.section_header for s in sections] == ["A", "B"]
-    assert sections[1].section_text == "### C\nText"
+    assert [s.header for s in sections] == ["A", "B"]
+    assert sections[1].content == "### C\nText"
 
 
 @pytest.mark.parametrize("max_level", [0, 7])
@@ -233,7 +252,7 @@ def test_skipped_levels():
     """
     sections = split_text("# A\n### C\n#### E\n## B\n### D")
 
-    assert [s.section_header for s in sections] == ["A", "C", "E", "B", "D"]
+    assert [s.header for s in sections] == ["A", "C", "E", "B", "D"]
     assert [s.metadata.parent_id for s in sections] == [None, 0, 1, 0, 3]
     assert sections[1].metadata.parents == {"h1": "A"}
     assert sections[2].metadata.parents == {"h1": "A", "h3": "C"}
@@ -250,7 +269,7 @@ def test_duplicate_headers_kept():
     """Headers with the same text under the same parent are separate sections."""
     sections = split_text("# A\n## Notes\nOne\n## Notes\nTwo")
 
-    assert [(s.section_header, s.section_text) for s in sections[1:]] == [
+    assert [(s.header, s.content) for s in sections[1:]] == [
         ("Notes", "One"),
         ("Notes", "Two"),
     ]
@@ -267,7 +286,7 @@ def test_duplicate_headers_in_outline():
 def test_siblings_do_not_leak_between_same_named_parents():
     """Children of different parents with the same text point to their own parent."""
     sections = split_text("# A\n## Setup\n### X\n# B\n## Setup\n### Y")
-    by_header = {s.section_header: s for s in sections}
+    by_header = {s.header: s for s in sections}
 
     assert by_header["X"].metadata.parent_id == 1
     assert by_header["Y"].metadata.parent_id == 4
@@ -278,9 +297,9 @@ def test_preamble():
     """Text before the first header is a level-0 section with an empty header."""
     sections = split_text("Intro text\n\n# Header\nContent")
 
-    assert sections[0].section_header == ""
-    assert sections[0].header_level == 0
-    assert sections[0].section_text == "Intro text"
+    assert sections[0].header == ""
+    assert sections[0].level == 0
+    assert sections[0].content == "Intro text"
     assert sections[0].to_markdown() == "Intro text"
     assert (sections[0].metadata.id, sections[0].metadata.parent_id) == (0, None)
     assert (sections[1].metadata.id, sections[1].metadata.parent_id) == (1, None)
@@ -291,8 +310,8 @@ def test_no_headers():
     sections = split_text("Just text.\nMore text.")
 
     assert len(sections) == 1
-    assert sections[0].header_level == 0
-    assert sections[0].section_text == "Just text.\nMore text."
+    assert sections[0].level == 0
+    assert sections[0].content == "Just text.\nMore text."
 
 
 @pytest.mark.parametrize(
@@ -309,7 +328,7 @@ def test_header_text(line, expected_header):
     """Header text drops the closing '#' sequence and keeps '#' inside the text."""
     sections = split_text(line)
 
-    assert sections[0].section_header == expected_header
+    assert sections[0].header == expected_header
 
 
 @pytest.mark.parametrize(
@@ -324,15 +343,15 @@ def test_not_a_header(line):
     sections = split_text(f"# Header\n{line}\nNext line")
 
     assert len(sections) == 1
-    assert sections[0].section_text == f"{line}\nNext line"
+    assert sections[0].content == f"{line}\nNext line"
 
 
 def test_windows_line_endings():
     """CRLF line endings do not end up in header text."""
     sections = split_text("# A\r\nText\r\n## B\r\nMore")
 
-    assert [s.section_header for s in sections] == ["A", "B"]
-    assert sections[0].section_text == "Text"
+    assert [s.header for s in sections] == ["A", "B"]
+    assert sections[0].content == "Text"
 
 
 def test_no_text_lost(sample_markdown):
@@ -350,7 +369,7 @@ def test_header_starting_with_hash():
     """A header whose text starts with '#' keeps it."""
     sections = split_text("## # Foo\nText")
 
-    assert sections[0].section_header == "# Foo"
+    assert sections[0].header == "# Foo"
 
 
 def test_front_matter_is_not_split():
@@ -358,15 +377,15 @@ def test_front_matter_is_not_split():
     front_matter = "---\ntitle: Guide\n# A YAML comment\n---"
     sections = split_text(f"{front_matter}\n# Real\nText")
 
-    assert [s.section_header for s in sections] == ["", "Real"]
-    assert sections[0].section_text == front_matter
+    assert [s.header for s in sections] == ["", "Real"]
+    assert sections[0].content == front_matter
 
 
 def test_unclosed_front_matter_is_a_thematic_break():
     """A leading '---' without a closing line does not hide the headers after it."""
     sections = split_text("---\n# A\nText")
 
-    assert [s.section_header for s in sections] == ["", "A"]
+    assert [s.header for s in sections] == ["", "A"]
 
 
 @pytest.mark.parametrize(
@@ -377,8 +396,8 @@ def test_html_comment_block(comment):
     """'#' lines inside an HTML comment block are not headers."""
     sections = split_text(f"# A\n{comment}\n# B")
 
-    assert [s.section_header for s in sections] == ["A", "B"]
-    assert sections[0].section_text == comment
+    assert [s.header for s in sections] == ["A", "B"]
+    assert sections[0].content == comment
 
 
 @pytest.mark.parametrize(
@@ -396,8 +415,8 @@ def test_raw_html_block(block):
     """'#' lines inside a <pre>, <script>, <style> or <textarea> block are not headers."""
     sections = split_text(f"# A\n{block}\n# B")
 
-    assert [s.section_header for s in sections] == ["A", "B"]
-    assert sections[0].section_text == block
+    assert [s.header for s in sections] == ["A", "B"]
+    assert sections[0].content == block
 
 
 @pytest.mark.parametrize("line", ["<pre>x</pre>", "<preview>"])
@@ -405,7 +424,7 @@ def test_line_that_does_not_open_raw_html_block(line):
     """A <pre> closed on its own line, or a tag like <preview>, hides no headers."""
     sections = split_text(f"# A\n{line}\n# B\n# C")
 
-    assert [s.section_header for s in sections] == ["A", "B", "C"]
+    assert [s.header for s in sections] == ["A", "B", "C"]
 
 
 def test_details_headers_are_split():
@@ -417,7 +436,7 @@ def test_details_headers_are_split():
     details = "<details>\n<summary>More</summary>\n\n# Inside\n\n</details>"
     sections = split_text(f"# A\n{details}")
 
-    assert [s.section_header for s in sections] == ["A", "Inside"]
+    assert [s.header for s in sections] == ["A", "Inside"]
 
 
 @pytest.mark.parametrize(
@@ -432,8 +451,8 @@ def test_fence_in_list_item(list_item):
     """Fences on a list item line, or indented under one, hide their '#' lines."""
     sections = split_text(f"# A\n{list_item}\n# B")
 
-    assert [s.section_header for s in sections] == ["A", "B"]
-    assert sections[0].section_text == list_item
+    assert [s.header for s in sections] == ["A", "B"]
+    assert sections[0].content == list_item
 
 
 def test_setext_headers_are_text():
@@ -441,7 +460,7 @@ def test_setext_headers_are_text():
     sections = split_text("# A\nTitle\n=====\nText")
 
     assert len(sections) == 1
-    assert sections[0].section_text == "Title\n=====\nText"
+    assert sections[0].content == "Title\n=====\nText"
 
 
 def test_many_siblings():
@@ -465,7 +484,7 @@ def test_byte_order_mark_in_text():
     """A UTF-8 byte order mark before the first header does not hide it."""
     sections = split_text("\ufeff# Title\nText")
 
-    assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
+    assert [(s.level, s.header) for s in sections] == [(1, "Title")]
 
 
 def test_byte_order_mark_in_outline():
@@ -482,8 +501,8 @@ def test_byte_order_mark_in_file(tmp_path):
 
     sections = split_file(md_file)
 
-    assert [(s.header_level, s.section_header) for s in sections] == [(1, "Title")]
-    assert sections[0].section_text == "Text"
+    assert [(s.level, s.header) for s in sections] == [(1, "Title")]
+    assert sections[0].content == "Text"
 
 
 def test_split_file_spans_index_file_contents(tmp_path):
@@ -510,16 +529,16 @@ def test_front_matter_with_lists_and_comments():
     )
     sections = split_text(f"{front_matter}\n# Real\nText")
 
-    assert [s.section_header for s in sections] == ["", "Real"]
-    assert sections[0].section_text == front_matter
+    assert [s.header for s in sections] == ["", "Real"]
+    assert sections[0].content == front_matter
 
 
 def test_horizontal_rules_are_not_front_matter():
     """Two '---' lines around Markdown content are horizontal rules, not front matter."""
     sections = split_text("---\n# A\ntext\n---\n# B")
 
-    assert [s.section_header for s in sections] == ["", "A", "B"]
-    assert sections[1].section_text == "text\n---"
+    assert [s.header for s in sections] == ["", "A", "B"]
+    assert sections[1].content == "text\n---"
 
 
 @pytest.mark.parametrize(
@@ -535,7 +554,7 @@ def test_unclosed_block_logs_warning(caplog, text, block, line_number):
     with caplog.at_level("WARNING", logger="markdown_chunkify"):
         sections = split_text(text)
 
-    assert [s.section_header for s in sections] == ["A"]
+    assert [s.header for s in sections] == ["A"]
     assert f"The {block} that starts on line {line_number} is never closed" in caplog.text
 
 
@@ -560,7 +579,7 @@ def test_mid_line_html_comment_is_not_recognized():
     """A comment that opens mid-line does not hide the '#' lines inside it."""
     sections = split_text("# A\ntext <!--\n# B\n-->")
 
-    assert [s.section_header for s in sections] == ["A", "B"]
+    assert [s.header for s in sections] == ["A", "B"]
 
 
 @pytest.mark.parametrize(
@@ -571,7 +590,7 @@ def test_front_matter_must_start_with_a_key(text):
     """A '---' block whose first line is not a 'key:' entry is not front matter."""
     sections = split_text(text)
 
-    assert [(s.header_level, s.section_header) for s in sections] == [
+    assert [(s.level, s.header) for s in sections] == [
         (0, ""),
         (1, "Title"),
         (2, "Next"),
@@ -584,7 +603,7 @@ def test_span_slices_section_from_source(sample_markdown):
 
     for section in sections:
         start, end = section.metadata.span
-        assert sample_markdown[start:end].endswith(section.section_text)
+        assert sample_markdown[start:end].endswith(section.content)
         assert sample_markdown[start:end].lstrip().startswith("#")
         assert section.metadata.char_count == end - start
 
@@ -617,7 +636,7 @@ def test_keeps_source_text():
     """Sections keep the source text, including entity names."""
     sections = split_text("# Müller GmbH\n北京")
 
-    assert (sections[0].section_header, sections[0].section_text) == ("Müller GmbH", "北京")
+    assert (sections[0].header, sections[0].content) == ("Müller GmbH", "北京")
 
 
 def test_outline_keeps_source_text():

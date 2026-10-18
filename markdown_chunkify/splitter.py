@@ -46,8 +46,8 @@ Example:
     ... '''
     >>> sections = split_text(text)
     >>> for section in sections:
-    ...     print(f"Header: {section.section_header}")
-    ...     print(f"Level: {section.header_level}")
+    ...     print(f"Header: {section.header}")
+    ...     print(f"Level: {section.level}")
     ...     print(f"Id: {section.metadata.id}")
     ...     print(f"Parent id: {section.metadata.parent_id}")
     ...     print(f"Parents: {section.metadata.parents}")
@@ -327,9 +327,9 @@ def _create_sections_from_outline(
 
     Returns:
         list[Section]: A flat list of Section objects, each containing:
-            - section_header (str): The header text
-            - section_text (str): The content under the header
-            - header_level (int): The level of the header
+            - header (str): The header text
+            - content (str): The content under the header
+            - level (int): The level of the header
             - metadata (SectionMetadata): Contains the section's id, its parent's id,
               the parent headers, the section's span and its character count
     """
@@ -339,9 +339,9 @@ def _create_sections_from_outline(
     for node in outline:
         sections.append(
             Section(
-                section_header=node.header,
-                section_text=node.content,
-                header_level=node.level,
+                header=node.header,
+                content=node.content,
+                level=node.level,
                 metadata=SectionMetadata(
                     id=node.id,
                     parent_id=node.parent_id,
@@ -374,9 +374,9 @@ def split_text(text: str, *, max_level: int = MAX_HEADER_LEVEL) -> list[Section]
 
     Returns:
         list[Section]: A list of Section objects in document order, each containing:
-            - section_header (str): The header text without '#' markers
-            - section_text (str): The content between this header and the next
-            - header_level (int): The level of the header (1 for H1, 2 for H2, etc.)
+            - header (str): The header text without '#' markers
+            - content (str): The content between this header and the next
+            - level (int): The level of the header (1 for H1, 2 for H2, etc.)
             - metadata (SectionMetadata): Contains:
                 - id (int): The section's index in the returned list
                 - parent_id (int | None): The id of the enclosing section, or None for
@@ -400,7 +400,7 @@ def split_text(text: str, *, max_level: int = MAX_HEADER_LEVEL) -> list[Section]
         ... Content B
         ... '''
         >>> sections = split_text(text)
-        >>> sections[0].section_header
+        >>> sections[0].header
         'Main Topic'
         >>> sections[1].metadata.parents
         {'h1': 'Main Topic'}
