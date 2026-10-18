@@ -12,7 +12,7 @@ The first release on PyPI.
 - Renamed `MarkdownSplitter.from_file` to `split_file`. It is an instance method like `split_text` and uses the splitter's `max_level` instead of taking it as an argument. ([#15])
 - Removed `metadata.siblings` and the `max_siblings` option. Sections with the same `parent_id` are siblings. ([#16])
 - Added `metadata.id`, the section's position in document order starting at 0, and `metadata.parent_id`, the id of the enclosing section or `None`. Outline nodes from `get_document_outline` carry the same two fields. ([#16])
-- Unicode normalization is off by default. `split_text` and `split_file` keep the source text unless `normalize_unicode=True` is passed, which transliterates headers and text to ASCII with anyascii. anyascii is a new dependency. ([#15], [#16])
+- Removed Unicode normalization and the anyascii dependency. `split_text` and `split_file` no longer take `normalize_unicode`, `metadata.normalized` is removed, and sections keep the source text. To get ASCII text, run `anyascii(section.section_text)` after splitting. ([#15], [#16], [#34])
 - `metadata.parents` is typed `dict[str, str]` instead of `dict[str, str | None]`. ([#17])
 - A header with no text (`#`, `## ##` or only whitespace after the `#`) stays as text of the enclosing section. Before, it became a section with `#` or whitespace as its header. ([#17])
 - `get_document_outline` returns `OutlineNode` models instead of dicts. `OutlineNode` is exported from the package root, and `[node.model_dump() for node in outline]` returns the nodes as dicts. ([#24])
@@ -37,3 +37,4 @@ The first release on PyPI.
 [#17]: https://github.com/Gal-Gilor/markdown-chunkify/pull/17
 [#24]: https://github.com/Gal-Gilor/markdown-chunkify/pull/24
 [#33]: https://github.com/Gal-Gilor/markdown-chunkify/pull/33
+[#34]: https://github.com/Gal-Gilor/markdown-chunkify/pull/34

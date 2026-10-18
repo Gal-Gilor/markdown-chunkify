@@ -2,7 +2,7 @@
 
 # markdown-chunkify
 
-A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact, links each section to its parent section, and can transliterate Unicode to ASCII.
+A Python library that splits Markdown into hierarchical sections. It keeps code blocks intact and links each section to its parent section.
 
 ## Features
 
@@ -12,7 +12,6 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 - Text before the first header, or a document without headers, is returned as a level-0 section with an empty header
 - `section.breadcrumb()` returns the section's header path, such as `Docker > Installation`, to send with the section text to an embedding model or LLM
 - Records where each section is in the source text. `text[start:end]` with `start, end = section.metadata.span` returns the section's header line and text as written. `metadata.char_count` is the length of that span, not of `section_text` or `to_markdown()`
-- Keeps the source text by default. `normalize_unicode=True` transliterates headers and text to ASCII (`Café` becomes `Cafe`)
 
 ## Installation
 
@@ -20,7 +19,7 @@ A Python library that splits Markdown into hierarchical sections. It keeps code 
 pip install markdown-chunkify
 ```
 
-The splitter depends on Pydantic and [anyascii](https://github.com/anyascii/anyascii).
+The splitter depends on Pydantic.
 
 ## Usage
 
@@ -77,22 +76,6 @@ prompt_text = f"{section.breadcrumb()}\n\n{section.section_text}"
 
 Text before the first header returns an empty string. The breadcrumb is computed from `metadata.parents`, so it is not part of the serialized section.
 
-### Unicode normalization
-
-With `normalize_unicode=True`, `split_text` and `split_file` transliterate each section's header and text to ASCII with [anyascii](https://github.com/anyascii/anyascii). The parents use the transliterated headers. It is off by default.
-```python
-text = "# Café\nnaïve — “quoted”"
-
-splitter.split_text(text)[0].section_text  # 'naïve — “quoted”'
-splitter.split_text(text, normalize_unicode=True)[0].section_text  # 'naive - "quoted"'
-```
-
-Transliteration also rewrites text that has no Latin form: `Привет` becomes `Privet`, `北京` becomes `BeiJing` and emoji become names such as `:grinning:`. Code blocks are transliterated too, so `x = "é"` becomes `x = "e"`.
-
-Leave it off when you extract entities for a knowledge graph. Transliteration changes entity names (`Müller GmbH` becomes `Muller GmbH`), so entities extracted from normalized text no longer match the source document or other sources that keep the original spelling. It suits pipelines that need ASCII-only text, such as a search index with an ASCII tokenizer.
-
-Headers are found before the text is transliterated, so spans still point at the source text and a fullwidth `＃` does not become a header. `metadata.normalized` is `True` for sections whose header or text changed. `get_document_outline` always returns the source text.
-
 ### Limitations
 
 - Only ATX headers (`#` to `######`) are recognized. Setext headers, underlined with `===` or `---`, stay in the section text.
@@ -128,7 +111,7 @@ A section returned by `split_text` and `split_file`. It adds the header level an
 class Section(MarkdownContent):
     # Number of # symbols (1-6), 0 for text before the first header
     header_level: int
-    # Normalization and hierarchy information
+    # Hierarchy and position information
     metadata: SectionMetadata
 
     # Convert the section back to Markdown
@@ -140,15 +123,13 @@ class Section(MarkdownContent):
 
 ### SectionMetadata
 
-A section's id, its parent's id, its parent headers, whether Unicode normalization changed it, and where it is in the source text.
+A section's id, its parent's id, its parent headers and where it is in the source text.
 ```python
 class SectionMetadata(BaseModel):
     # Position in document order, starting at 0
     id: int | None
     # Id of the enclosing section, None for top-level sections
     parent_id: int | None
-    # Whether Unicode normalization changed the header or text
-    normalized: bool
     # Parent headers by level, such as {"h1": "Guide", "h2": "Install"}
     parents: dict[str, str]
     # Start (inclusive) and end (exclusive) offsets in the source text
@@ -157,7 +138,7 @@ class SectionMetadata(BaseModel):
     char_count: int
 ```
 
-The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written. A normalized section keeps the span and character count of the source text, so `text[start:end]` returns the text before transliteration.
+The span starts at the header line and ends at the last non-whitespace character of the section text. It does not include subsections, leading blank lines or trailing whitespace. Offsets count Python characters (code points), not UTF-8 bytes or UTF-16 units, in the string passed to `split_text`, including a byte order mark. `split_file` offsets index into the file's contents as decoded with its `encoding`, with line endings kept as written.
 
 ### OutlineNode
 

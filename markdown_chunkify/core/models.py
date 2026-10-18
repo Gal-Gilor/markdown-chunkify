@@ -19,10 +19,6 @@ class SectionMetadata(BaseModel):
     parent_id: int | None = Field(
         None, description="The id of the enclosing section. None for top-level sections"
     )
-    normalized: bool = Field(
-        False,
-        description="Whether Unicode normalization changed the section header or text",
-    )
     parents: dict[str, str] = Field(
         default_factory=dict,
         description="Parent headers hierarchy for the section",
