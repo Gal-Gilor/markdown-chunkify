@@ -272,7 +272,6 @@ class MarkdownSplitter(BaseSplitter):
         offset = len(_BYTE_ORDER_MARK) if text.startswith(_BYTE_ORDER_MARK) else 0
         text = text[offset:]
         if not text.strip():
-            logger.warning("Received empty text input.")
             return []
 
         headers = self._find_headers(text)
@@ -415,10 +414,7 @@ class MarkdownSplitter(BaseSplitter):
             0
         """
         outline = self.get_document_outline(text)
-        sections = self._create_sections_from_outline(outline)
-
-        logger.info(f"Successfully split the Markdown into {len(sections)} sections.")
-        return sections
+        return self._create_sections_from_outline(outline)
 
     def split_file(self, filepath: str | Path, encoding: str = "utf-8") -> list[Section]:
         """Split a Markdown file into sections, as `split_text` does.
