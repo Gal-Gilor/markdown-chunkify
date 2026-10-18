@@ -1,8 +1,8 @@
 import pytest
 from pydantic import ValidationError
 
-from markdown_chunkify.components.splitters import MarkdownSplitter
-from markdown_chunkify.core.models import SectionMetadata
+from markdown_chunkify.models import SectionMetadata
+from markdown_chunkify.splitter import MarkdownSplitter
 
 
 def test_empty_input(splitter):

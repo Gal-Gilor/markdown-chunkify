@@ -1,9 +1,9 @@
 import logging
 
-from markdown_chunkify.components.splitters import MarkdownSplitter
-from markdown_chunkify.core.models import OutlineNode
-from markdown_chunkify.core.models import Section
-from markdown_chunkify.core.models import SectionMetadata
+from markdown_chunkify.models import OutlineNode
+from markdown_chunkify.models import Section
+from markdown_chunkify.models import SectionMetadata
+from markdown_chunkify.splitter import MarkdownSplitter
 
 logging.getLogger(__name__).addHandler(logging.NullHandler())
 

@@ -2,7 +2,7 @@ from textwrap import dedent
 
 import pytest
 
-from markdown_chunkify.components.splitters import MarkdownSplitter
+from markdown_chunkify.splitter import MarkdownSplitter
 
 
 @pytest.fixture

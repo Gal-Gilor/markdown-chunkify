@@ -3,9 +3,9 @@ import re
 from pathlib import Path
 
 from markdown_chunkify.core.interfaces import BaseSplitter
-from markdown_chunkify.core.models import OutlineNode
-from markdown_chunkify.core.models import Section
-from markdown_chunkify.core.models import SectionMetadata
+from markdown_chunkify.models import OutlineNode
+from markdown_chunkify.models import Section
+from markdown_chunkify.models import SectionMetadata
 
 logger = logging.getLogger(__name__)
 

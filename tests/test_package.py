@@ -2,7 +2,7 @@ import subprocess
 import sys
 
 import markdown_chunkify
-from markdown_chunkify.core import models
+from markdown_chunkify import models
 
 
 def test_star_import():

@@ -1,7 +1,7 @@
 from abc import ABC
 from abc import abstractmethod
 
-from markdown_chunkify.core.models import Section
+from markdown_chunkify.models import Section
 
 
 class BaseSplitter(ABC):
